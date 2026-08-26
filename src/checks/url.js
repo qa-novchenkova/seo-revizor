@@ -2,11 +2,12 @@
  * Проверка одного адреса: код ответа, цепочка редиректов, ключевые заголовки.
  *
  * Здесь НЕТ НИ СЛОВА про MCP. Это обычная функция: дали адрес — вернула данные.
- * Так сделано специально: логику можно запускать и тестировать отдельно,
- * не поднимая никакого сервера и не привлекая модель.
+ * Формулировок замечаний здесь тоже нет: проверка только фиксирует факт,
+ * а текст берётся из реестра правил в src/rules.
  */
 import { request, describeError } from '../lib/http.js'
 import { counted, FORMS } from '../lib/text.js'
+import { reporter, summarize } from '../lib/findings.js'
 
 /** Заголовки, которые интересны при аудите. Остальные не тащим, чтобы не засорять ответ. */
 const INTERESTING_HEADERS = [
@@ -28,6 +29,7 @@ export async function checkUrl(url, options = {}) {
   const { maxHops = 10, timeoutMs = 15000 } = options
 
   const startedAt = Date.now()
+  const found = reporter()
   const chain = []
   let current = url
 
@@ -49,9 +51,8 @@ export async function checkUrl(url, options = {}) {
         const next = new URL(location, current).href
 
         if (chain.some((step) => step.url === next)) {
-          return buildResult(url, chain, startedAt, null, [
-            'Петля редиректов: адрес ссылается сам на себя по кругу.',
-          ])
+          found.add('redirect-loop')
+          return build(url, chain, startedAt, null, found)
         }
 
         current = next
@@ -65,59 +66,59 @@ export async function checkUrl(url, options = {}) {
         if (value) headers[name] = value
       }
 
-      return buildResult(url, chain, startedAt, headers)
+      return build(url, chain, startedAt, headers, found)
     }
 
-    return buildResult(url, chain, startedAt, null, [
-      `Больше ${counted(maxHops, FORMS.redirect)} подряд — похоже на зацикливание.`,
-    ])
+    found.add('redirect-too-many', { limit: counted(maxHops, FORMS.redirect) })
+    return build(url, chain, startedAt, null, found)
   } catch (error) {
+    const message = describeError(error, timeoutMs)
+    found.add('url-unreachable', { error: message })
+
     return {
       url,
       ok: false,
-      error: describeError(error, timeoutMs),
+      error: message,
       chain,
       responseMs: Date.now() - startedAt,
-      notes: ['Адрес не открылся. Проверьте написание, DNS и доступность сервера.'],
+      findings: found.list(),
+      summary: summarize(found.list()),
     }
   }
 }
 
-/** Собирает итоговый ответ и формулирует замечания по чек-листу. */
-function buildResult(requestedUrl, chain, startedAt, headers, extraNotes = []) {
+function build(requestedUrl, chain, startedAt, headers, found) {
   const last = chain[chain.length - 1] || {}
   const redirects = chain.length - 1
-  const notes = [...extraNotes]
 
   if (headers) {
     if (redirects > 1) {
-      notes.push(
-        `Цепочка из ${counted(redirects, FORMS.redirect)}. Должен быть один шаг: ` +
-          'каждый лишний — потеря времени и части ссылочного веса.',
-      )
+      found.add('redirect-chain', { count: counted(redirects, FORMS.redirect) })
     }
     if (last.status >= 400) {
-      notes.push(`Конечный адрес отдаёт ${last.status}. Если на него есть внутренние ссылки — это битая ссылка.`)
+      found.add('url-broken', { status: last.status })
     }
     if (last.status === 200 && !headers['last-modified']) {
-      notes.push('Нет заголовка Last-Modified. Поисковику труднее понять, что переобходить.')
+      found.add('no-last-modified')
     }
     if (headers['server'] && /\d/.test(headers['server'])) {
-      notes.push(`Заголовок Server раскрывает версию: «${headers['server']}». По ней подбирают готовые уязвимости.`)
+      found.add('server-version', { value: headers['server'] })
     }
     if (headers['x-powered-by']) {
-      notes.push(`Заголовок X-Powered-By раскрывает платформу: «${headers['x-powered-by']}». Его принято убирать.`)
+      found.add('x-powered-by', { value: headers['x-powered-by'] })
     }
     if (headers['x-robots-tag'] && /noindex/i.test(headers['x-robots-tag'])) {
-      notes.push('В заголовке X-Robots-Tag стоит noindex — страница исключена из поиска на уровне сервера.')
+      found.add('x-robots-noindex')
     }
     if (requestedUrl.startsWith('https://') && !headers['strict-transport-security']) {
-      notes.push('Нет заголовка Strict-Transport-Security. Браузер не запомнит, что сайт открывается только по https.')
+      found.add('no-hsts')
     }
     if (!headers['content-encoding']) {
-      notes.push('Ответ пришёл без сжатия. Включение gzip или brotli обычно уменьшает объём в разы.')
+      found.add('no-compression')
     }
   }
+
+  const findings = found.list()
 
   return {
     url: requestedUrl,
@@ -128,6 +129,7 @@ function buildResult(requestedUrl, chain, startedAt, headers, extraNotes = []) {
     chain,
     headers: headers || {},
     responseMs: Date.now() - startedAt,
-    notes,
+    findings,
+    summary: summarize(findings),
   }
 }

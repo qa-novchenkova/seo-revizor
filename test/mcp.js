@@ -14,6 +14,8 @@ import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 
+import { SEVERITY_LABELS as LABELS } from '../src/rules/index.js'
+
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 
 const server = spawn(process.execPath, [path.join(root, 'src', 'server.js')], {
@@ -66,13 +68,16 @@ async function call(name, args) {
   return JSON.parse(answer.result.content[0].text)
 }
 
-function showNotes(data, limit = 3) {
-  if (!data?.notes?.length) {
+function showFindings(data, limit = 3) {
+  const findings = data?.findings || []
+  if (!findings.length) {
     console.log('   замечаний нет')
     return
   }
-  for (const note of data.notes.slice(0, limit)) console.log('   • ' + note)
-  if (data.notes.length > limit) console.log(`   … и ещё ${data.notes.length - limit}`)
+  for (const finding of findings.slice(0, limit)) {
+    console.log(`   [${LABELS[finding.severity]}] ${finding.message}`)
+  }
+  if (findings.length > limit) console.log(`   … и ещё ${findings.length - limit}`)
 }
 
 // ── 1. Рукопожатие ───────────────────────────────────────────────────────────
@@ -99,7 +104,7 @@ console.log(`\n3. Разбор сайта ${site}`)
 console.log('\n   шаг 1 — robots.txt')
 const robots = await call('check_robots', { url: site })
 console.log(`   существует: ${robots?.exists ? 'да' : 'нет'}, карт сайта в нём: ${robots?.sitemaps?.length ?? 0}`)
-showNotes(robots)
+showFindings(robots)
 
 console.log('\n   шаг 2 — карта сайта')
 // Адрес карты берём из robots.txt, если он там указан. Именно так и работает
@@ -107,7 +112,7 @@ console.log('\n   шаг 2 — карта сайта')
 const sitemapTarget = robots?.sitemaps?.[0] || site
 const sitemap = await call('check_sitemap', { url: sitemapTarget, limit: 5 })
 console.log(`   тип: ${sitemap?.type}, адресов: ${sitemap?.total}, типов страниц: ${sitemap?.pageTypes?.length ?? 0}`)
-showNotes(sitemap)
+showFindings(sitemap)
 
 // Адрес берём не первый попавшийся, а из представительной выборки: иначе
 // на большом сайте проверим десять однотипных страниц подряд.
@@ -116,12 +121,12 @@ console.log(`\n   шаг 3 — код ответа, тип страницы «${
 console.log(`   ${picked.url}`)
 const url = await call('check_url', { url: picked.url })
 console.log(`   код: ${url?.status}, редиректов: ${url?.redirects}`)
-showNotes(url)
+showFindings(url)
 
 console.log(`\n   шаг 4 — мета-теги той же страницы`)
 const meta = await call('check_meta', { url: picked.url })
 console.log(`   title: ${meta?.title?.length ?? 0} симв., H1: ${meta?.h1?.length ?? 0}`)
-showNotes(meta)
+showFindings(meta)
 
-console.log('\nГотово. Все четыре инструмента отвечают по протоколу.\n')
+console.log('\nГотово. Все инструменты отвечают по протоколу.\n')
 server.kill()

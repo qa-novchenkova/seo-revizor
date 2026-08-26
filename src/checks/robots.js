@@ -3,29 +3,28 @@
  *
  * Самая частая катастрофа после релиза: на боевой сайт уезжает тестовый
  * robots.txt с полным запретом, и сайт исчезает из поиска за сутки.
- * Поэтому проверка отдельным инструментом и с явным замечанием.
  */
 import { fetchText, describeError, originOf } from '../lib/http.js'
+import { reporter, summarize } from '../lib/findings.js'
 
 export async function checkRobots(siteUrl, options = {}) {
   const { timeoutMs = 15000 } = options
+  const found = reporter()
 
-  const origin = originOf(siteUrl)
-  const robotsUrl = origin + 'robots.txt'
+  const robotsUrl = originOf(siteUrl) + 'robots.txt'
 
   let page
   try {
     page = await fetchText(robotsUrl, { timeoutMs })
   } catch (error) {
-    return {
-      url: robotsUrl,
-      ok: false,
-      error: describeError(error, timeoutMs),
-      notes: ['robots.txt не удалось запросить.'],
-    }
+    const message = describeError(error, timeoutMs)
+    found.add('robots-error', { status: message })
+    return { url: robotsUrl, ok: false, error: message, findings: found.list(), summary: summarize(found.list()) }
   }
 
   if (page.status === 404) {
+    found.add('robots-missing')
+    const findings = found.list()
     return {
       url: robotsUrl,
       ok: true,
@@ -33,54 +32,43 @@ export async function checkRobots(siteUrl, options = {}) {
       status: 404,
       groups: [],
       sitemaps: [],
-      notes: [
-        'robots.txt отсутствует. Формально это не запрещено, но тогда нельзя ни закрыть служебные разделы, ни указать карту сайта.',
-      ],
+      findings,
+      summary: summarize(findings),
     }
   }
 
   if (!page.ok) {
+    found.add('robots-error', { status: page.status })
     return {
       url: robotsUrl,
       ok: false,
       status: page.status,
       exists: false,
-      notes: [`robots.txt отдал ${page.status}. Роботы не смогут прочитать правила.`],
+      findings: found.list(),
+      summary: summarize(found.list()),
     }
   }
 
   const parsed = parseRobots(page.body)
-  const notes = []
 
   const everyone = parsed.groups.find((group) => group.userAgents.includes('*'))
   if (everyone && everyone.disallow.includes('/')) {
-    notes.push(
-      'КРИТИЧНО: в robots.txt стоит «Disallow: /» для всех роботов. Сайт закрыт от индексации целиком. ' +
-        'Чаще всего это тестовый файл, случайно выложенный на боевой сервер.',
-    )
+    found.add('robots-disallow-all')
   }
 
-  if (!parsed.sitemaps.length) {
-    notes.push('В robots.txt не указана директива Sitemap. Поисковику труднее найти карту сайта.')
-  }
+  if (!parsed.sitemaps.length) found.add('robots-no-sitemap')
+  if (!parsed.groups.length) found.add('robots-empty')
 
-  if (!parsed.groups.length) {
-    notes.push('В robots.txt нет ни одной группы правил. Файл есть, но ничего не задаёт.')
-  }
-
-  const blockedAssets = (everyone?.disallow || []).filter((path) =>
-    /\.(css|js)$|\/(css|js|assets|static|bitrix|wp-content)\//i.test(path),
+  const blockedAssets = (everyone?.disallow || []).filter((entry) =>
+    /\.(css|js)$|\/(css|js|assets|static|bitrix|wp-content)\//i.test(entry),
   )
   if (blockedAssets.length) {
-    notes.push(
-      `Закрыты ресурсы оформления: ${blockedAssets.slice(0, 3).join(', ')}. ` +
-        'Робот не увидит страницу так, как её видит человек, и может решить, что вёрстка сломана.',
-    )
+    found.add('robots-blocks-assets', { paths: blockedAssets.slice(0, 3).join(', ') })
   }
 
-  if (page.body.length > 32 * 1024) {
-    notes.push('robots.txt больше 32 КБ. Поисковики читают его не целиком.')
-  }
+  if (page.body.length > 32 * 1024) found.add('robots-too-big')
+
+  const findings = found.list()
 
   return {
     url: robotsUrl,
@@ -91,14 +79,15 @@ export async function checkRobots(siteUrl, options = {}) {
     groups: parsed.groups,
     sitemaps: parsed.sitemaps,
     crawlDelay: parsed.crawlDelay,
-    notes,
+    findings,
+    summary: summarize(findings),
   }
 }
 
 /**
  * Разбор robots.txt.
- * Строки группируются по User-agent: несколько User-agent подряд означают
- * одну группу правил на всех перечисленных роботов.
+ * Несколько строк User-agent подряд означают одну группу правил
+ * на всех перечисленных роботов — это место, где наивный разбор ошибается.
  */
 function parseRobots(body) {
   const groups = []

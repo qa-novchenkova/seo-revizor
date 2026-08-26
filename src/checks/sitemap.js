@@ -9,12 +9,14 @@ import * as cheerio from 'cheerio'
 import { fetchText, describeError, originOf } from '../lib/http.js'
 import { counted, FORMS } from '../lib/text.js'
 import { pickSample } from '../lib/sample.js'
+import { reporter, summarize } from '../lib/findings.js'
 
 /** Сколько вложенных карт разбирать. Больше — долго и обычно не нужно. */
 const MAX_NESTED = 5
 
 export async function checkSitemap(target, options = {}) {
   const { timeoutMs = 15000, limit = 50, sampleSize = 8 } = options
+  const found = reporter()
 
   // Можно передать и адрес сайта, и адрес самой карты
   const sitemapUrl = /\.xml($|\?)/i.test(target) ? target : originOf(target) + 'sitemap.xml'
@@ -23,29 +25,23 @@ export async function checkSitemap(target, options = {}) {
   try {
     page = await fetchText(sitemapUrl, { timeoutMs })
   } catch (error) {
-    return {
-      url: sitemapUrl,
-      ok: false,
-      error: describeError(error, timeoutMs),
-      notes: ['Карта сайта не запрашивается.'],
-    }
+    const message = describeError(error, timeoutMs)
+    found.add('sitemap-error', { status: message })
+    return { url: sitemapUrl, ok: false, error: message, findings: found.list(), summary: summarize(found.list()) }
   }
 
   if (!page.ok) {
+    found.add(page.status === 404 ? 'sitemap-missing' : 'sitemap-error', { status: page.status })
     return {
       url: sitemapUrl,
       ok: false,
       status: page.status,
-      notes: [
-        page.status === 404
-          ? 'Карты сайта нет по стандартному адресу. Проверьте директиву Sitemap в robots.txt.'
-          : `Карта сайта отдала ${page.status}.`,
-      ],
+      findings: found.list(),
+      summary: summarize(found.list()),
     }
   }
 
   const parsed = parseSitemap(page.body, sitemapUrl)
-  const notes = []
   let urls = parsed.urls
   const nested = []
 
@@ -55,38 +51,28 @@ export async function checkSitemap(target, options = {}) {
       try {
         const childPage = await fetchText(child, { timeoutMs })
         if (!childPage.ok) {
-          notes.push(`Вложенная карта ${child} отдала ${childPage.status}.`)
+          found.add('sitemap-nested-error', { url: child, status: childPage.status })
           continue
         }
         const childParsed = parseSitemap(childPage.body, child)
         nested.push({ url: child, count: childParsed.urls.length })
         urls = urls.concat(childParsed.urls)
       } catch {
-        notes.push(`Вложенная карта ${child} не открылась.`)
+        found.add('sitemap-nested-error', { url: child, status: 'нет ответа' })
       }
     }
     if (parsed.sitemaps.length > MAX_NESTED) {
-      notes.push(
-        `Вложенных карт ${parsed.sitemaps.length}, разобраны первые ${MAX_NESTED}. ` +
-          'Остальные пропущены, чтобы не затягивать проверку.',
-      )
+      found.add('sitemap-nested-limited', { total: parsed.sitemaps.length, limit: MAX_NESTED })
     }
   }
 
-  // ── замечания ─────────────────────────────────────────────────────────────
-  if (!urls.length) {
-    notes.push('В карте нет ни одного адреса.')
-  }
+  if (!urls.length) found.add('sitemap-empty')
 
   const withoutLastmod = urls.filter((item) => !item.lastmod).length
-  if (urls.length && withoutLastmod === urls.length) {
-    notes.push('Ни у одного адреса нет даты изменения. Поисковику труднее понять, что переобходить.')
-  }
+  if (urls.length && withoutLastmod === urls.length) found.add('sitemap-no-lastmod')
 
   const duplicates = urls.length - new Set(urls.map((item) => item.loc)).size
-  if (duplicates > 0) {
-    notes.push(`В карте повторяется ${counted(duplicates, FORMS.address)}.`)
-  }
+  if (duplicates > 0) found.add('sitemap-duplicates', { count: counted(duplicates, FORMS.address) })
 
   const origin = new URL(sitemapUrl).origin
   const foreign = urls.filter((item) => {
@@ -96,44 +82,26 @@ export async function checkSitemap(target, options = {}) {
       return true
     }
   })
-  if (foreign.length) {
-    notes.push(
-      `В карте ${counted(foreign.length, FORMS.address)} с другого домена. ` +
-        'Такие записи поисковик проигнорирует.',
-    )
-  }
+  if (foreign.length) found.add('sitemap-foreign', { count: counted(foreign.length, FORMS.address) })
 
   const withParams = urls.filter((item) => item.loc.includes('?')).length
-  if (withParams) {
-    notes.push(
-      `В карте ${counted(withParams, FORMS.address)} с параметрами в строке. ` +
-        'Обычно это дубли основных страниц, им в карте не место.',
-    )
-  }
+  if (withParams) found.add('sitemap-params', { count: counted(withParams, FORMS.address) })
 
-  if (page.body.length > 50 * 1024 * 1024) {
-    notes.push('Файл карты больше 50 МБ — превышен лимит поисковых систем.')
-  }
-  if (urls.length > 50000) {
-    notes.push(
-      `В карте ${counted(urls.length, FORMS.address)}, лимит одной карты — 50 000. ` +
-        'Нужно разбить на несколько и собрать их в карту карт.',
-    )
-  }
+  if (page.body.length > 50 * 1024 * 1024) found.add('sitemap-too-big')
+  if (urls.length > 50000) found.add('sitemap-too-many', { count: counted(urls.length, FORMS.address) })
 
   // Представительная выборка: по одной странице каждого типа, а не первые
   // подряд. Именно её стоит брать для дальнейшей поштучной проверки.
-  const sample = pickSample(urls, { limit: sampleSize, origin: new URL(sitemapUrl).origin + '/' })
+  const sample = pickSample(urls, { limit: sampleSize, origin: origin + '/' })
 
   // Адреса чужих доменов в подсчёте структуры не участвуют: иначе после
   // переезда сайта проверка решит, что у него плоский каталог.
   const ownGroups = sample.groups.filter((group) => !group.shape.startsWith('другой домен'))
   if (ownGroups.length === 1 && urls.length - foreign.length > 20) {
-    notes.push(
-      'Все адреса в карте одного вида: отдельной структуры разделов нет. ' +
-        'Обычно это признак плоского каталога без вложенности.',
-    )
+    found.add('sitemap-flat')
   }
+
+  const findings = found.list()
 
   return {
     url: sitemapUrl,
@@ -146,7 +114,8 @@ export async function checkSitemap(target, options = {}) {
     sample: sample.pages,
     urls: urls.slice(0, limit).map((item) => item.loc),
     withoutLastmod,
-    notes,
+    findings,
+    summary: summarize(findings),
   }
 }
 
@@ -164,15 +133,8 @@ function parseSitemap(body, baseUrl) {
   $('urlset > url').each((_, el) => {
     const loc = $(el).find('loc').first().text().trim()
     if (!loc) return
-    urls.push({
-      loc,
-      lastmod: $(el).find('lastmod').first().text().trim() || null,
-    })
+    urls.push({ loc, lastmod: $(el).find('lastmod').first().text().trim() || null })
   })
 
-  return {
-    type: sitemaps.length ? 'sitemapindex' : 'urlset',
-    sitemaps,
-    urls,
-  }
+  return { type: sitemaps.length ? 'sitemapindex' : 'urlset', sitemaps, urls }
 }

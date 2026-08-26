@@ -16,10 +16,11 @@ import { checkUrl } from './checks/url.js'
 import { checkMeta } from './checks/meta.js'
 import { checkRobots } from './checks/robots.js'
 import { checkSitemap } from './checks/sitemap.js'
+import { allRules, rulesByArea } from './rules/index.js'
 
 // McpServer — класс из SDK. Объект хранит список инструментов и знает,
 // какой обработчик вызвать, когда придёт запрос на выполнение.
-const server = new McpServer({ name: 'seo-revizor', version: '0.2.0' })
+const server = new McpServer({ name: 'seo-revizor', version: '0.3.0' })
 
 /**
  * Небольшая обёртка, чтобы не повторять одно и то же в каждом инструменте.
@@ -104,7 +105,34 @@ tool(
   ({ url, limit, sampleSize }) => checkSitemap(url, { limit: limit ?? 50, sampleSize: sampleSize ?? 8 }),
 )
 
+tool(
+  'list_rules',
+  {
+    title: 'Чек-лист проверок',
+    description:
+      'Возвращает список всех правил, по которым работает ревизор: идентификатор, ' +
+      'важность, формулировку, объяснение «почему это плохо» и «что делать». ' +
+      'Вызывай, когда нужно понять, что вообще умеет проверять инструмент, ' +
+      'или объяснить пользователю смысл конкретной находки по её идентификатору.',
+    inputSchema: {
+      area: z.string().optional().describe('Отобрать по области, например «Индексация»'),
+      severity: z.enum(['critical', 'important', 'minor']).optional().describe('Отобрать по важности'),
+    },
+  },
+  ({ area, severity }) => {
+    let rules = allRules()
+    if (area) rules = rules.filter((rule) => rule.area.toLowerCase().includes(area.toLowerCase()))
+    if (severity) rules = rules.filter((rule) => rule.severity === severity)
+
+    return {
+      total: rules.length,
+      areas: rulesByArea().map((group) => ({ area: group.area, total: group.total })),
+      rules: rules.map(({ file, ...rule }) => rule),
+    }
+  },
+)
+
 // stdio — это способ связи: клиент запускает сервер как обычную программу
 // и разговаривает с ним через её ввод и вывод. Никаких портов и сети.
 await server.connect(new StdioServerTransport())
-console.error('Ревизор запущен, инструментов: 4')
+console.error(`Ревизор запущен, инструментов: 5, правил в чек-листе: ${allRules().length}`)

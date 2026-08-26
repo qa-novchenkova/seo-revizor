@@ -13,6 +13,7 @@ import { checkUrl } from '../src/checks/url.js'
 import { checkMeta } from '../src/checks/meta.js'
 import { checkRobots } from '../src/checks/robots.js'
 import { checkSitemap } from '../src/checks/sitemap.js'
+import { SEVERITY_LABELS, SEVERITIES } from '../src/rules/index.js'
 
 const CHECKS = {
   url: { run: checkUrl, print: printUrl },
@@ -40,12 +41,7 @@ if (result.ok === false) {
   CHECKS[name].print(result)
 }
 
-if (result.notes?.length) {
-  console.log('\n  замечания:')
-  for (const note of result.notes) console.log(`    • ${note}`)
-} else if (result.ok !== false) {
-  console.log('\n  замечаний нет')
-}
+printFindings(result)
 console.log('')
 
 // ── как показывать каждую проверку ───────────────────────────────────────────
@@ -124,6 +120,35 @@ function printSitemap(r) {
 
 // Объявлены через function, а не через const: такие определения поднимаются
 // наверх, и помощниками можно пользоваться в коде выше по файлу.
+/**
+ * Находки печатаются по важности: сначала критичное. Для каждой видно,
+ * что не так, почему это плохо и что делать. Тексты берутся из реестра правил.
+ */
+function printFindings(result) {
+  const findings = result.findings || []
+
+  if (!findings.length) {
+    console.log('\n  замечаний нет')
+    return
+  }
+
+  const counts = result.summary || {}
+  const parts = SEVERITIES.filter((level) => counts[level]).map(
+    (level) => `${SEVERITY_LABELS[level]}: ${counts[level]}`,
+  )
+  console.log(`\n  найдено ${findings.length} (${parts.join(', ')})`)
+
+  for (const finding of findings) {
+    console.log(`\n  [${SEVERITY_LABELS[finding.severity]}] ${finding.title}`)
+    console.log(`    ${finding.message}`)
+    console.log(`    почему:     ${finding.why}`)
+    console.log(`    что делать: ${finding.fix}`)
+    if (finding.examples?.length) {
+      console.log(`    например:   ${finding.examples.slice(0, 2).join(', ')}`)
+    }
+  }
+}
+
 function line(label, value) {
   console.log(`  ${String(label).padEnd(20)} ${value}`)
 }

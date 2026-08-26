@@ -77,6 +77,12 @@ npm run check meta https://example.com/
 npm run mcp https://example.com/
 ```
 
+То же самое, но с объяснениями по каждой находке:
+
+```bash
+npm run mcp https://example.com/ full
+```
+
 ## Подключение к Claude Code
 
 Файл `.mcp.json` уже в репозитории. Откройте папку проекта в Claude Code

@@ -68,16 +68,32 @@ async function call(name, args) {
   return JSON.parse(answer.result.content[0].text)
 }
 
+// Подробный режим: node test/mcp.js https://site.ru/ full
+const detailed = process.argv.includes('full') || process.argv.includes('--full')
+
 function showFindings(data, limit = 3) {
   const findings = data?.findings || []
   if (!findings.length) {
     console.log('   замечаний нет')
     return
   }
+
+  if (detailed) {
+    for (const finding of findings) {
+      console.log(`\n   [${LABELS[finding.severity]}] ${finding.title}`)
+      console.log(`     ${finding.message}`)
+      console.log(`     почему:     ${finding.why}`)
+      console.log(`     что делать: ${finding.fix}`)
+    }
+    return
+  }
+
   for (const finding of findings.slice(0, limit)) {
     console.log(`   [${LABELS[finding.severity]}] ${finding.message}`)
   }
-  if (findings.length > limit) console.log(`   … и ещё ${findings.length - limit}`)
+  if (findings.length > limit) {
+    console.log(`   … и ещё ${findings.length - limit}. Подробно: добавьте «full» в конец команды`)
+  }
 }
 
 // ── 1. Рукопожатие ───────────────────────────────────────────────────────────

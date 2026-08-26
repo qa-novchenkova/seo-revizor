@@ -14,36 +14,40 @@ import { z } from 'zod'
 
 import { checkUrl } from './checks/url.js'
 
-const сервер = new McpServer({
+// McpServer — класс из SDK. Объект хранит список инструментов и знает,
+// какой обработчик вызвать, когда придёт запрос на выполнение.
+const server = new McpServer({
   name: 'seo-revizor',
   version: '0.1.0',
 })
 
-сервер.registerTool(
+server.registerTool(
+  // 1. имя, по которому инструмент вызывают
   'check_url',
   {
     title: 'Проверка адреса',
-    // Это описание читает модель. От того, насколько понятно здесь написано,
+    // 2. описание читает модель. От того, насколько понятно здесь написано,
     // зависит, догадается ли она вызвать инструмент в нужный момент.
     description:
       'Проверяет один адрес: код ответа сервера, полную цепочку редиректов, ключевые ' +
       'заголовки и время ответа. Вызывай, когда нужно узнать, что сервер отдаёт по ' +
       'конкретному URL: жив ли адрес, куда он ведёт, сколько редиректов по дороге.',
+    // 3. какие аргументы принимает и какого типа. SDK превратит это в JSON-схему
+    // и сам проверит входящие данные до вызова обработчика.
     inputSchema: {
-      url: z
-        .string()
-        .describe('Полный адрес со схемой, например https://example.com/catalog/'),
+      url: z.string().describe('Полный адрес со схемой, например https://example.com/catalog/'),
     },
   },
+  // 4. обработчик: что делать при вызове. Сюда приходят уже проверенные аргументы.
   async ({ url }) => {
-    const результат = await checkUrl(url)
+    const result = await checkUrl(url)
     return {
-      content: [{ type: 'text', text: JSON.stringify(результат, null, 2) }],
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
     }
   },
 )
 
 // stdio — это способ связи: клиент запускает сервер как обычную программу
 // и разговаривает с ним через её ввод и вывод. Никаких портов и сети.
-await сервер.connect(new StdioServerTransport())
+await server.connect(new StdioServerTransport())
 console.error('Ревизор запущен, инструментов: 1')

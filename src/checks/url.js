@@ -7,7 +7,7 @@
  */
 
 /** Заголовки, которые интересны при аудите. Остальные не тащим, чтобы не засорять ответ. */
-const ЗАГОЛОВКИ = [
+const INTERESTING_HEADERS = [
   'content-type',
   'last-modified',
   'server',
@@ -24,9 +24,10 @@ const ЗАГОЛОВКИ = [
  * лимит, а со второй попытки проходит мгновенно. Без повтора живой сайт
  * периодически получал бы вердикт «не открылся» — для аудита это недопустимо.
  */
-async function запросить(url, timeoutMs, попыток = 2) {
-  let последняя
-  for (let i = 1; i <= попыток; i++) {
+async function request(url, timeoutMs, attempts = 2) {
+  let lastError
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
     try {
       // redirect: 'manual' — ключевой момент. По умолчанию fetch сам проходит
       // все редиректы, и мы бы увидели только конечную страницу. А нам нужна
@@ -37,114 +38,122 @@ async function запросить(url, timeoutMs, попыток = 2) {
         // В заголовках HTTP допустима только латиница: кириллица здесь падает с ошибкой.
         headers: { 'user-agent': 'SEO-Revizor/0.1 (site audit bot)' },
       })
-    } catch (ошибка) {
-      последняя = ошибка
+    } catch (error) {
+      lastError = error
       // Таймаут по нашему сигналу — это уже вердикт, повторять смысла нет.
-      if (ошибка.name === 'TimeoutError') throw ошибка
-      if (i < попыток) await new Promise((r) => setTimeout(r, 400))
+      if (error.name === 'TimeoutError') throw error
+      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 400))
     }
   }
-  throw последняя
+
+  throw lastError
 }
 
 /**
  * @param {string} url  полный адрес со схемой
- * @param {{maxHops?: number, timeoutMs?: number}} opts
+ * @param {{maxHops?: number, timeoutMs?: number}} options
  */
-export async function checkUrl(url, opts = {}) {
-  const { maxHops = 10, timeoutMs = 15000 } = opts
+export async function checkUrl(url, options = {}) {
+  const { maxHops = 10, timeoutMs = 15000 } = options
 
-  const начало = Date.now()
-  const цепочка = []
-  let текущий = url
+  const startedAt = Date.now()
+  const chain = []
+  let current = url
 
   try {
-    for (let шаг = 0; шаг <= maxHops; шаг++) {
-      const ответ = await запросить(текущий, timeoutMs)
+    for (let hop = 0; hop <= maxHops; hop++) {
+      const response = await request(current, timeoutMs)
+      const location = response.headers.get('location')
 
-      const переход = ответ.headers.get('location')
-      цепочка.push({
-        адрес: текущий,
-        код: ответ.status,
-        ведёт: переход ? new URL(переход, текущий).href : null,
+      chain.push({
+        url: current,
+        status: response.status,
+        location: location ? new URL(location, current).href : null,
       })
 
       // 3xx с заголовком Location — идём дальше по цепочке
-      if (ответ.status >= 300 && ответ.status < 400 && переход) {
-        const следующий = new URL(переход, текущий).href
+      if (response.status >= 300 && response.status < 400 && location) {
+        const next = new URL(location, current).href
 
-        if (цепочка.some((з) => з.адрес === следующий)) {
-          return готово(url, цепочка, начало, null, ['Петля редиректов: адрес ссылается сам на себя по кругу.'])
+        if (chain.some((step) => step.url === next)) {
+          return buildResult(url, chain, startedAt, null, [
+            'Петля редиректов: адрес ссылается сам на себя по кругу.',
+          ])
         }
-        текущий = следующий
+
+        current = next
         continue
       }
 
       // дошли до конечной страницы
-      const заголовки = {}
-      for (const имя of ЗАГОЛОВКИ) {
-        const значение = ответ.headers.get(имя)
-        if (значение) заголовки[имя] = значение
+      const headers = {}
+      for (const name of INTERESTING_HEADERS) {
+        const value = response.headers.get(name)
+        if (value) headers[name] = value
       }
-      return готово(url, цепочка, начало, заголовки)
+
+      return buildResult(url, chain, startedAt, headers)
     }
 
-    return готово(url, цепочка, начало, null, [`Больше ${maxHops} редиректов подряд — похоже на зацикливание.`])
-  } catch (ошибка) {
+    return buildResult(url, chain, startedAt, null, [
+      `Больше ${maxHops} редиректов подряд — похоже на зацикливание.`,
+    ])
+  } catch (error) {
     return {
-      адрес: url,
-      доступен: false,
-      ошибка:
-        ошибка.name === 'TimeoutError'
+      url,
+      ok: false,
+      error:
+        error.name === 'TimeoutError'
           ? `Нет ответа за ${timeoutMs} мс`
-          : `${ошибка.message || ошибка}${ошибка.cause?.code ? ` (${ошибка.cause.code})` : ''}`,
-      цепочка,
-      мсОтвета: Date.now() - начало,
-      замечания: ['Адрес не открылся. Проверьте написание, DNS и доступность сервера.'],
+          : `${error.message || error}${error.cause?.code ? ` (${error.cause.code})` : ''}`,
+      chain,
+      responseMs: Date.now() - startedAt,
+      notes: ['Адрес не открылся. Проверьте написание, DNS и доступность сервера.'],
     }
   }
 }
 
-function готово(исходный, цепочка, начало, заголовки, замечанияСверху = []) {
-  const последний = цепочка[цепочка.length - 1] || {}
-  const редиректов = цепочка.length - 1
-  const замечания = [...замечанияСверху]
+/** Собирает итоговый ответ и формулирует замечания по чек-листу. */
+function buildResult(requestedUrl, chain, startedAt, headers, extraNotes = []) {
+  const last = chain[chain.length - 1] || {}
+  const redirects = chain.length - 1
+  const notes = [...extraNotes]
 
-  if (заголовки) {
-    if (редиректов > 1) {
-      замечания.push(
-        `Цепочка из ${редиректов} редиректов. Должен быть один шаг: каждый лишний — потеря времени и части ссылочного веса.`,
+  if (headers) {
+    if (redirects > 1) {
+      notes.push(
+        `Цепочка из ${redirects} редиректов. Должен быть один шаг: каждый лишний — потеря времени и части ссылочного веса.`,
       )
     }
-    if (последний.код >= 400) {
-      замечания.push(`Конечный адрес отдаёт ${последний.код}. Если на него есть внутренние ссылки — это битая ссылка.`)
+    if (last.status >= 400) {
+      notes.push(`Конечный адрес отдаёт ${last.status}. Если на него есть внутренние ссылки — это битая ссылка.`)
     }
-    if (последний.код === 200 && !заголовки['last-modified']) {
-      замечания.push('Нет заголовка Last-Modified. Поисковику труднее понять, что переобходить.')
+    if (last.status === 200 && !headers['last-modified']) {
+      notes.push('Нет заголовка Last-Modified. Поисковику труднее понять, что переобходить.')
     }
-    if (заголовки['server'] && /\d/.test(заголовки['server'])) {
-      замечания.push(`Заголовок Server раскрывает версию: «${заголовки['server']}». По ней подбирают готовые уязвимости.`)
+    if (headers['server'] && /\d/.test(headers['server'])) {
+      notes.push(`Заголовок Server раскрывает версию: «${headers['server']}». По ней подбирают готовые уязвимости.`)
     }
-    if (заголовки['x-powered-by']) {
-      замечания.push(`Заголовок X-Powered-By раскрывает платформу: «${заголовки['x-powered-by']}». Его принято убирать.`)
+    if (headers['x-powered-by']) {
+      notes.push(`Заголовок X-Powered-By раскрывает платформу: «${headers['x-powered-by']}». Его принято убирать.`)
     }
-    if (исходный.startsWith('https://') && !заголовки['strict-transport-security']) {
-      замечания.push('Нет заголовка Strict-Transport-Security. Браузер не запомнит, что сайт открывается только по https.')
+    if (requestedUrl.startsWith('https://') && !headers['strict-transport-security']) {
+      notes.push('Нет заголовка Strict-Transport-Security. Браузер не запомнит, что сайт открывается только по https.')
     }
-    if (!заголовки['content-encoding']) {
-      замечания.push('Ответ пришёл без сжатия. Включение gzip или brotli обычно уменьшает объём в разы.')
+    if (!headers['content-encoding']) {
+      notes.push('Ответ пришёл без сжатия. Включение gzip или brotli обычно уменьшает объём в разы.')
     }
   }
 
   return {
-    адрес: исходный,
-    доступен: true,
-    код: последний.код ?? null,
-    конечныйАдрес: последний.адрес ?? исходный,
-    редиректов,
-    цепочка,
-    заголовки: заголовки || {},
-    мсОтвета: Date.now() - начало,
-    замечания,
+    url: requestedUrl,
+    ok: true,
+    status: last.status ?? null,
+    finalUrl: last.url ?? requestedUrl,
+    redirects,
+    chain,
+    headers: headers || {},
+    responseMs: Date.now() - startedAt,
+    notes,
   }
 }

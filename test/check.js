@@ -8,33 +8,35 @@
  */
 import { checkUrl } from '../src/checks/url.js'
 
-const адрес = process.argv[2] || 'https://example.com/'
-const р = await checkUrl(адрес)
+const target = process.argv[2] || 'https://example.com/'
+const result = await checkUrl(target)
 
-console.log('\n  ' + адрес)
-console.log('  ' + '─'.repeat(Math.max(20, адрес.length)))
+console.log('\n  ' + target)
+console.log('  ' + '─'.repeat(Math.max(20, target.length)))
 
-if (!р.доступен) {
-  console.log('  не открылся:', р.ошибка)
+if (!result.ok) {
+  console.log('  не открылся:', result.error)
 } else {
-  console.log(`  код ответа       ${р.код}`)
-  console.log(`  редиректов       ${р.редиректов}`)
-  console.log(`  время ответа     ${р.мсОтвета} мс`)
-  if (р.редиректов > 0) {
+  console.log(`  код ответа       ${result.status}`)
+  console.log(`  редиректов       ${result.redirects}`)
+  console.log(`  время ответа     ${result.responseMs} мс`)
+
+  if (result.redirects > 0) {
     console.log('\n  цепочка:')
-    for (const з of р.цепочка) {
-      console.log(`    ${String(з.код).padEnd(4)} ${з.адрес}${з.ведёт ? '\n         → ' + з.ведёт : ''}`)
+    for (const step of result.chain) {
+      console.log(`    ${String(step.status).padEnd(4)} ${step.url}${step.location ? '\n         → ' + step.location : ''}`)
     }
   }
+
   console.log('\n  заголовки:')
-  for (const [к, v] of Object.entries(р.заголовки)) {
-    console.log(`    ${к.padEnd(28)} ${v}`)
+  for (const [name, value] of Object.entries(result.headers)) {
+    console.log(`    ${name.padEnd(28)} ${value}`)
   }
 }
 
-if (р.замечания.length) {
+if (result.notes.length) {
   console.log('\n  замечания:')
-  for (const з of р.замечания) console.log(`    • ${з}`)
+  for (const note of result.notes) console.log(`    • ${note}`)
 } else {
   console.log('\n  замечаний нет')
 }

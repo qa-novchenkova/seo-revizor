@@ -6,6 +6,7 @@
  * не поднимая никакого сервера и не привлекая модель.
  */
 import { request, describeError } from '../lib/http.js'
+import { counted, FORMS } from '../lib/text.js'
 
 /** Заголовки, которые интересны при аудите. Остальные не тащим, чтобы не засорять ответ. */
 const INTERESTING_HEADERS = [
@@ -68,7 +69,7 @@ export async function checkUrl(url, options = {}) {
     }
 
     return buildResult(url, chain, startedAt, null, [
-      `Больше ${maxHops} редиректов подряд — похоже на зацикливание.`,
+      `Больше ${counted(maxHops, FORMS.redirect)} подряд — похоже на зацикливание.`,
     ])
   } catch (error) {
     return {
@@ -91,7 +92,8 @@ function buildResult(requestedUrl, chain, startedAt, headers, extraNotes = []) {
   if (headers) {
     if (redirects > 1) {
       notes.push(
-        `Цепочка из ${redirects} редиректов. Должен быть один шаг: каждый лишний — потеря времени и части ссылочного веса.`,
+        `Цепочка из ${counted(redirects, FORMS.redirect)}. Должен быть один шаг: ` +
+          'каждый лишний — потеря времени и части ссылочного веса.',
       )
     }
     if (last.status >= 400) {

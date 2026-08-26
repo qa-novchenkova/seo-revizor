@@ -7,6 +7,7 @@
  */
 import * as cheerio from 'cheerio'
 import { fetchText, describeError, originOf } from '../lib/http.js'
+import { counted, FORMS } from '../lib/text.js'
 
 /** Сколько вложенных карт разбирать. Больше — долго и обычно не нужно. */
 const MAX_NESTED = 5
@@ -64,7 +65,10 @@ export async function checkSitemap(target, options = {}) {
       }
     }
     if (parsed.sitemaps.length > MAX_NESTED) {
-      notes.push(`Вложенных карт ${parsed.sitemaps.length}, разобрано первые ${MAX_NESTED}.`)
+      notes.push(
+        `Вложенных карт ${parsed.sitemaps.length}, разобраны первые ${MAX_NESTED}. ` +
+          'Остальные пропущены, чтобы не затягивать проверку.',
+      )
     }
   }
 
@@ -80,7 +84,7 @@ export async function checkSitemap(target, options = {}) {
 
   const duplicates = urls.length - new Set(urls.map((item) => item.loc)).size
   if (duplicates > 0) {
-    notes.push(`В карте ${duplicates} повторяющихся адресов.`)
+    notes.push(`В карте повторяется ${counted(duplicates, FORMS.address)}.`)
   }
 
   const origin = new URL(sitemapUrl).origin
@@ -92,19 +96,28 @@ export async function checkSitemap(target, options = {}) {
     }
   })
   if (foreign.length) {
-    notes.push(`В карте ${foreign.length} адресов с другого домена. Такие записи поисковик проигнорирует.`)
+    notes.push(
+      `В карте ${counted(foreign.length, FORMS.address)} с другого домена. ` +
+        'Такие записи поисковик проигнорирует.',
+    )
   }
 
   const withParams = urls.filter((item) => item.loc.includes('?')).length
   if (withParams) {
-    notes.push(`Адресов с параметрами в карте: ${withParams}. Обычно это дубли, им в карте не место.`)
+    notes.push(
+      `В карте ${counted(withParams, FORMS.address)} с параметрами в строке. ` +
+        'Обычно это дубли основных страниц, им в карте не место.',
+    )
   }
 
   if (page.body.length > 50 * 1024 * 1024) {
     notes.push('Файл карты больше 50 МБ — превышен лимит поисковых систем.')
   }
   if (urls.length > 50000) {
-    notes.push(`Адресов ${urls.length}, лимит одной карты — 50 000. Нужно разбить на несколько.`)
+    notes.push(
+      `В карте ${counted(urls.length, FORMS.address)}, лимит одной карты — 50 000. ` +
+        'Нужно разбить на несколько и собрать их в карту карт.',
+    )
   }
 
   return {

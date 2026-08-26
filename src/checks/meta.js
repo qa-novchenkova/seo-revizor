@@ -6,6 +6,7 @@
  */
 import * as cheerio from 'cheerio'
 import { fetchText, describeError } from '../lib/http.js'
+import { counted, FORMS } from '../lib/text.js'
 
 /** Ориентиры длины. Взяты из практики, а не из стандарта: стандарта тут нет. */
 const TITLE_MIN = 30
@@ -91,10 +92,16 @@ export async function checkMeta(url, options = {}) {
     notes.push('Нет тега title. Поисковик подставит в сниппет что угодно.')
   } else {
     if (title.length < TITLE_MIN) {
-      notes.push(`Title короткий: ${title.length} символов. Есть место для дополнительных запросов.`)
+      notes.push(
+        `Title короткий: ${counted(title.length, FORMS.symbol)}. В выдаче помещается около ${TITLE_MAX}, ` +
+          'так что есть место уточнить: что именно, для кого, в каком городе.',
+      )
     }
     if (title.length > TITLE_MAX) {
-      notes.push(`Title длинный: ${title.length} символов. Хвост в выдаче обрежется.`)
+      notes.push(
+        `Title длинный: ${counted(title.length, FORMS.symbol)}. В выдаче показывается около ${TITLE_MAX}, ` +
+          'остальное обрежется многоточием — важное лучше ставить в начало.',
+      )
     }
   }
 
@@ -102,10 +109,16 @@ export async function checkMeta(url, options = {}) {
     notes.push('Нет мета-описания. На позиции не влияет, но именно оно решает, кликнут по строке или нет.')
   } else {
     if (description.length < DESCRIPTION_MIN) {
-      notes.push(`Описание короткое: ${description.length} символов. Причины кликнуть в него не помещается.`)
+      notes.push(
+        `Описание короткое: ${counted(description.length, FORMS.symbol)}. Это текст под заголовком ` +
+          `в результатах поиска, и именно он убеждает открыть страницу. Ориентир — от ${DESCRIPTION_MIN}.`,
+      )
     }
     if (description.length > DESCRIPTION_MAX) {
-      notes.push(`Описание длинное: ${description.length} символов. Конец не покажется.`)
+      notes.push(
+        `Описание длинное: ${counted(description.length, FORMS.symbol)}. В результатах поиска ` +
+          `покажется около ${DESCRIPTION_MAX}, конец обрежется.`,
+      )
     }
     if (title && description.trim() === title.trim()) {
       notes.push('Описание дословно повторяет title. Пользователь дважды читает одно и то же.')
@@ -116,7 +129,10 @@ export async function checkMeta(url, options = {}) {
     notes.push('Нет заголовка H1. Это второй по важности сигнал о содержимом страницы после title.')
   }
   if (h1.length > 1) {
-    notes.push(`Заголовков H1 на странице ${h1.length}. Должен быть один, остальное выглядит как переспам.`)
+    notes.push(
+      `На странице ${counted(h1.length, FORMS.heading)} уровня H1. Должен быть ровно один: ` +
+        'он говорит поисковику, о чём страница. Несколько выглядят как попытка переспама.',
+    )
   }
   if (h1.length === 1 && title && h1[0].trim() === title.trim()) {
     notes.push('H1 дословно совпадает с title. Упущена возможность охватить другие формулировки запроса.')
@@ -150,7 +166,8 @@ export async function checkMeta(url, options = {}) {
 
   if (withoutAlt.length) {
     notes.push(
-      `Изображений без alt: ${withoutAlt.length} из ${images.length}. Alt участвует в поиске по картинкам и читается вслух.`,
+      `Без атрибута alt ${counted(withoutAlt.length, FORMS.image)} из ${images.length}. ` +
+        'Alt участвует в поиске по картинкам и читается вслух программами для незрячих.',
     )
   }
 

@@ -1,18 +1,21 @@
 {
   "name": "seo-revizor",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Агент-ревизор: проверяет сайт по чек-листу",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "check": "node test/check.js",
-    "mcp": "node test/mcp.js"
+    "mcp": "node test/mcp.js",
+    "audit": "node test/audit.js",
+    "loop": "node test/loop.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "module",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.121.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "cheerio": "^1.2.0",
     "zod": "^4.4.3"

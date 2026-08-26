@@ -13,6 +13,7 @@ import { checkUrl } from '../src/checks/url.js'
 import { checkMeta } from '../src/checks/meta.js'
 import { checkRobots } from '../src/checks/robots.js'
 import { checkSitemap } from '../src/checks/sitemap.js'
+import { checkLinks } from '../src/checks/links.js'
 import { SEVERITY_LABELS, SEVERITIES } from '../src/rules/index.js'
 
 const CHECKS = {
@@ -20,6 +21,7 @@ const CHECKS = {
   meta: { run: checkMeta, print: printMeta },
   robots: { run: checkRobots, print: printRobots },
   sitemap: { run: checkSitemap, print: printSitemap },
+  links: { run: checkLinks, print: printLinks },
 }
 
 const [name, target] = process.argv.slice(2)
@@ -118,8 +120,42 @@ function printSitemap(r) {
   }
 }
 
-// Объявлены через function, а не через const: такие определения поднимаются
-// наверх, и помощниками можно пользоваться в коде выше по файлу.
+function printLinks(r) {
+  line('страниц обойдено', r.pagesCrawled)
+  line('внутренних ссылок', r.internal.total)
+  line('проверено из них', r.internal.checked)
+  line('битых', r.internal.broken.length)
+  line('через редирект', r.internal.redirects.length)
+  line('внешних ссылок', r.external.total)
+  line('без текста', r.anchors.empty)
+  line('невнятный текст', r.anchors.vague)
+
+  if (r.byShape.length) {
+    console.log('\n  что видно в разметке:')
+    for (const item of r.byShape.slice(0, 10)) {
+      console.log(`    ${String(item.total).padStart(4)}  ${item.shape}`)
+    }
+  }
+
+  if (r.internal.broken.length) {
+    console.log('\n  битые:')
+    for (const item of r.internal.broken.slice(0, 6)) {
+      console.log(`    ${String(item.status ?? 'нет ответа').padEnd(12)} ${item.url}`)
+    }
+  }
+
+  if (r.internal.redirects.length) {
+    console.log('\n  через редирект:')
+    for (const item of r.internal.redirects.slice(0, 6)) {
+      console.log(`    ${item.url}\n         → ${item.to}`)
+    }
+  }
+
+  if (r.external.hosts.length) {
+    console.log('\n  внешние домены: ' + r.external.hosts.slice(0, 8).join(', '))
+  }
+}
+
 /**
  * Находки печатаются по важности: сначала критичное. Для каждой видно,
  * что не так, почему это плохо и что делать. Тексты берутся из реестра правил.

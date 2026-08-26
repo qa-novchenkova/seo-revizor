@@ -16,6 +16,7 @@ import { checkUrl } from './checks/url.js'
 import { checkMeta } from './checks/meta.js'
 import { checkRobots } from './checks/robots.js'
 import { checkSitemap } from './checks/sitemap.js'
+import { checkLinks } from './checks/links.js'
 import { allRules, rulesByArea } from './rules/index.js'
 
 // McpServer — класс из SDK. Объект хранит список инструментов и знает,
@@ -106,6 +107,24 @@ tool(
 )
 
 tool(
+  'check_links',
+  {
+    title: 'Внутренние ссылки',
+    description:
+      'Собирает ссылки со страницы и проверяет их: битые, ведущие на переадресацию, ' +
+      'без текста, с неинформативным текстом вроде «подробнее», с атрибутом nofollow. ' +
+      'Отдельно показывает структуру: какие разделы вообще видны в разметке. ' +
+      'Вызывай, когда нужно понять связность сайта — например, если на главной ' +
+      'не видно ссылок на каталог, и непонятно, беда это сайта или её просто рисуют скриптами.',
+    inputSchema: {
+      url: urlArg,
+      depth: z.number().optional().describe('Глубина обхода: 1 — только эта страница, 2 — плюс страницы по её ссылкам. По умолчанию 1'),
+    },
+  },
+  ({ url, depth }) => checkLinks(url, { depth: depth ?? 1 }),
+)
+
+tool(
   'list_rules',
   {
     title: 'Чек-лист проверок',
@@ -135,4 +154,4 @@ tool(
 // stdio — это способ связи: клиент запускает сервер как обычную программу
 // и разговаривает с ним через её ввод и вывод. Никаких портов и сети.
 await server.connect(new StdioServerTransport())
-console.error(`Ревизор запущен, инструментов: 5, правил в чек-листе: ${allRules().length}`)
+console.error(`Ревизор запущен, инструментов: 6, правил в чек-листе: ${allRules().length}`)

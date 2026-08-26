@@ -86,7 +86,10 @@ const result = await audit('https://example.com/', {
 // ── что должно было произойти ────────────────────────────────────────────────
 const connected = steps.find((event) => event.type === 'connected')
 assert.ok(connected, 'агент должен подключиться к серверу')
-assert.equal(connected.tools.length, 5, 'должно быть пять инструментов')
+// Список инструментов растёт, поэтому проверяем не точное число, а что нужные на месте
+for (const name of ['check_url', 'check_meta', 'check_robots', 'check_sitemap', 'check_links']) {
+  assert.ok(connected.tools.includes(name), `инструмент ${name} должен быть доступен агенту`)
+}
 
 assert.deepEqual(
   result.calls.map((call) => call.name),

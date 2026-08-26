@@ -1,43 +1,125 @@
 /**
- * Запуск проверки НАПРЯМУЮ, без модели и без протокола.
+ * Запуск проверок НАПРЯМУЮ, без модели и без протокола.
  *
  * Это первое, чем стоит пользоваться при разработке: если функция здесь
  * работает неправильно, через MCP она правильнее не станет.
  *
- *   node test/check.js https://example.com/
+ *   node test/check.js url     https://example.com/
+ *   node test/check.js meta    https://example.com/
+ *   node test/check.js robots  https://example.com/
+ *   node test/check.js sitemap https://example.com/
  */
 import { checkUrl } from '../src/checks/url.js'
+import { checkMeta } from '../src/checks/meta.js'
+import { checkRobots } from '../src/checks/robots.js'
+import { checkSitemap } from '../src/checks/sitemap.js'
 
-const target = process.argv[2] || 'https://example.com/'
-const result = await checkUrl(target)
+const CHECKS = {
+  url: { run: checkUrl, print: printUrl },
+  meta: { run: checkMeta, print: printMeta },
+  robots: { run: checkRobots, print: printRobots },
+  sitemap: { run: checkSitemap, print: printSitemap },
+}
 
-console.log('\n  ' + target)
-console.log('  ' + '─'.repeat(Math.max(20, target.length)))
+const [name, target] = process.argv.slice(2)
 
-if (!result.ok) {
-  console.log('  не открылся:', result.error)
+if (!CHECKS[name] || !target) {
+  console.log('\n  Использование: node test/check.js <проверка> <адрес>')
+  console.log('  Проверки: ' + Object.keys(CHECKS).join(', ') + '\n')
+  process.exit(1)
+}
+
+const result = await CHECKS[name].run(target)
+
+console.log('\n  ' + (result.url || target))
+console.log('  ' + '─'.repeat(Math.min(76, Math.max(20, (result.url || target).length))))
+
+if (result.ok === false) {
+  console.log('  не получилось:', result.error || `код ${result.status}`)
 } else {
-  console.log(`  код ответа       ${result.status}`)
-  console.log(`  редиректов       ${result.redirects}`)
-  console.log(`  время ответа     ${result.responseMs} мс`)
+  CHECKS[name].print(result)
+}
 
-  if (result.redirects > 0) {
+if (result.notes?.length) {
+  console.log('\n  замечания:')
+  for (const note of result.notes) console.log(`    • ${note}`)
+} else if (result.ok !== false) {
+  console.log('\n  замечаний нет')
+}
+console.log('')
+
+// ── как показывать каждую проверку ───────────────────────────────────────────
+
+function printUrl(r) {
+  line('код ответа', r.status)
+  line('редиректов', r.redirects)
+  line('время ответа', r.responseMs + ' мс')
+
+  if (r.redirects > 0) {
     console.log('\n  цепочка:')
-    for (const step of result.chain) {
+    for (const step of r.chain) {
       console.log(`    ${String(step.status).padEnd(4)} ${step.url}${step.location ? '\n         → ' + step.location : ''}`)
     }
   }
 
   console.log('\n  заголовки:')
-  for (const [name, value] of Object.entries(result.headers)) {
-    console.log(`    ${name.padEnd(28)} ${value}`)
+  for (const [key, value] of Object.entries(r.headers)) {
+    console.log(`    ${key.padEnd(28)} ${value}`)
   }
 }
 
-if (result.notes.length) {
-  console.log('\n  замечания:')
-  for (const note of result.notes) console.log(`    • ${note}`)
-} else {
-  console.log('\n  замечаний нет')
+function printMeta(r) {
+  line('title', r.title ? `${r.title.length} симв.  ${cut(r.title.text, 60)}` : '— нет —')
+  line('description', r.description ? `${r.description.length} симв.  ${cut(r.description.text, 60)}` : '— нет —')
+  line('H1', r.h1.length ? r.h1.map((h) => cut(h, 60)).join(' | ') : '— нет —')
+  line('заголовков всего', r.headings.length)
+  line('canonical', r.canonical || '— нет —')
+  line('lang', r.lang || '— нет —')
+  line('meta robots', r.robotsMeta || '—')
+  line('Open Graph', [r.og.title && 'title', r.og.description && 'description', r.og.image && 'image'].filter(Boolean).join(', ') || '— нет —')
+  line('изображений', `${r.images.total}, без alt: ${r.images.withoutAlt}`)
+  line('микроразметка', r.schemaTypes.length ? r.schemaTypes.join(', ') : '— нет —')
 }
-console.log('')
+
+function printRobots(r) {
+  line('существует', r.exists ? 'да' : 'нет')
+  if (!r.exists) return
+  line('размер', r.size + ' байт')
+  line('групп правил', r.groups.length)
+  line('карт сайта', r.sitemaps.length)
+  for (const map of r.sitemaps) console.log(`      ${map}`)
+
+  for (const group of r.groups.slice(0, 4)) {
+    console.log(`\n    User-agent: ${group.userAgents.join(', ')}`)
+    console.log(`      запретов: ${group.disallow.length}, разрешений: ${group.allow.length}`)
+    for (const path of group.disallow.slice(0, 5)) console.log(`      Disallow: ${path}`)
+    if (group.disallow.length > 5) console.log(`      … и ещё ${group.disallow.length - 5}`)
+  }
+}
+
+function printSitemap(r) {
+  line('тип', r.type === 'sitemapindex' ? 'карта карт' : 'список адресов')
+  line('адресов всего', r.total)
+  line('без даты изменения', r.withoutLastmod)
+
+  if (r.nested.length) {
+    console.log('\n  вложенные карты:')
+    for (const child of r.nested) console.log(`    ${String(child.count).padStart(6)}  ${child.url}`)
+  }
+
+  if (r.urls.length) {
+    console.log('\n  первые адреса:')
+    for (const url of r.urls.slice(0, 8)) console.log(`    ${url}`)
+    if (r.total > 8) console.log(`    … и ещё ${r.total - 8}`)
+  }
+}
+
+// Объявлены через function, а не через const: такие определения поднимаются
+// наверх, и помощниками можно пользоваться в коде выше по файлу.
+function line(label, value) {
+  console.log(`  ${String(label).padEnd(20)} ${value}`)
+}
+
+function cut(text, max) {
+  return text.length > max ? text.slice(0, max - 1) + '…' : text
+}

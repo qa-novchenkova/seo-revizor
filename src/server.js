@@ -13,41 +13,95 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
 
 import { checkUrl } from './checks/url.js'
+import { checkMeta } from './checks/meta.js'
+import { checkRobots } from './checks/robots.js'
+import { checkSitemap } from './checks/sitemap.js'
 
 // McpServer — класс из SDK. Объект хранит список инструментов и знает,
 // какой обработчик вызвать, когда придёт запрос на выполнение.
-const server = new McpServer({
-  name: 'seo-revizor',
-  version: '0.1.0',
-})
+const server = new McpServer({ name: 'seo-revizor', version: '0.2.0' })
 
-server.registerTool(
-  // 1. имя, по которому инструмент вызывают
+/**
+ * Небольшая обёртка, чтобы не повторять одно и то же в каждом инструменте.
+ * Отвечает за две вещи: упаковку результата в формат протокола и за то,
+ * чтобы упавшая проверка вернула понятный текст, а не уронила сервер.
+ */
+function tool(name, meta, run) {
+  server.registerTool(name, meta, async (args) => {
+    try {
+      const result = await run(args)
+      return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] }
+    } catch (error) {
+      return {
+        isError: true,
+        content: [{ type: 'text', text: `Проверка «${name}» упала: ${error.message || error}` }],
+      }
+    }
+  })
+}
+
+const urlArg = z.string().describe('Полный адрес со схемой, например https://example.com/catalog/')
+
+tool(
   'check_url',
   {
     title: 'Проверка адреса',
-    // 2. описание читает модель. От того, насколько понятно здесь написано,
-    // зависит, догадается ли она вызвать инструмент в нужный момент.
     description:
       'Проверяет один адрес: код ответа сервера, полную цепочку редиректов, ключевые ' +
       'заголовки и время ответа. Вызывай, когда нужно узнать, что сервер отдаёт по ' +
       'конкретному URL: жив ли адрес, куда он ведёт, сколько редиректов по дороге.',
-    // 3. какие аргументы принимает и какого типа. SDK превратит это в JSON-схему
-    // и сам проверит входящие данные до вызова обработчика.
+    inputSchema: { url: urlArg },
+  },
+  ({ url }) => checkUrl(url),
+)
+
+tool(
+  'check_meta',
+  {
+    title: 'Мета-теги и заголовки страницы',
+    description:
+      'Скачивает страницу и разбирает её содержимое: title, описание, заголовки H1–H6 и их ' +
+      'иерархию, canonical, мета-тег robots, разметку Open Graph, микроразметку Schema.org, ' +
+      'атрибуты alt у изображений. Вызывай для проверки конкретной страницы на месте.',
+    inputSchema: { url: urlArg },
+  },
+  ({ url }) => checkMeta(url),
+)
+
+tool(
+  'check_robots',
+  {
+    title: 'Файл robots.txt',
+    description:
+      'Скачивает и разбирает robots.txt: группы правил, запреты, директивы Sitemap. ' +
+      'Отдельно проверяет, не закрыт ли сайт от индексации целиком. ' +
+      'Вызывай первым при аудите нового сайта: здесь находятся самые тяжёлые ошибки, ' +
+      'а заодно выясняется адрес карты сайта.',
     inputSchema: {
-      url: z.string().describe('Полный адрес со схемой, например https://example.com/catalog/'),
+      url: z.string().describe('Адрес сайта, например https://example.com/. Путь до robots.txt добавится сам'),
     },
   },
-  // 4. обработчик: что делать при вызове. Сюда приходят уже проверенные аргументы.
-  async ({ url }) => {
-    const result = await checkUrl(url)
-    return {
-      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
-    }
+  ({ url }) => checkRobots(url),
+)
+
+tool(
+  'check_sitemap',
+  {
+    title: 'Карта сайта',
+    description:
+      'Разбирает sitemap.xml и возвращает список адресов страниц. Понимает карту карт ' +
+      '(sitemapindex) и заглядывает внутрь. Проверяет дубли, чужие домены, адреса ' +
+      'с параметрами, наличие дат изменения. Вызывай, когда нужно получить список ' +
+      'страниц сайта для дальнейшей выборочной проверки.',
+    inputSchema: {
+      url: z.string().describe('Адрес сайта или прямой адрес карты. Если передан сайт, будет взят /sitemap.xml'),
+      limit: z.number().optional().describe('Сколько адресов вернуть в ответе, по умолчанию 50'),
+    },
   },
+  ({ url, limit }) => checkSitemap(url, { limit: limit ?? 50 }),
 )
 
 // stdio — это способ связи: клиент запускает сервер как обычную программу
 // и разговаривает с ним через её ввод и вывод. Никаких портов и сети.
 await server.connect(new StdioServerTransport())
-console.error('Ревизор запущен, инструментов: 1')
+console.error('Ревизор запущен, инструментов: 4')

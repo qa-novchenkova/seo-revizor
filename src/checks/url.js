@@ -1,10 +1,11 @@
 /**
- * Проверка одного адреса.
+ * Проверка одного адреса: код ответа, цепочка редиректов, ключевые заголовки.
  *
  * Здесь НЕТ НИ СЛОВА про MCP. Это обычная функция: дали адрес — вернула данные.
  * Так сделано специально: логику можно запускать и тестировать отдельно,
  * не поднимая никакого сервера и не привлекая модель.
  */
+import { request, describeError } from '../lib/http.js'
 
 /** Заголовки, которые интересны при аудите. Остальные не тащим, чтобы не засорять ответ. */
 const INTERESTING_HEADERS = [
@@ -15,39 +16,8 @@ const INTERESTING_HEADERS = [
   'strict-transport-security',
   'content-encoding',
   'cache-control',
+  'x-robots-tag',
 ]
-
-/**
- * Один запрос с повтором.
- *
- * Первое подключение к незнакомому хосту иногда не укладывается в стандартный
- * лимит, а со второй попытки проходит мгновенно. Без повтора живой сайт
- * периодически получал бы вердикт «не открылся» — для аудита это недопустимо.
- */
-async function request(url, timeoutMs, attempts = 2) {
-  let lastError
-
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      // redirect: 'manual' — ключевой момент. По умолчанию fetch сам проходит
-      // все редиректы, и мы бы увидели только конечную страницу. А нам нужна
-      // именно цепочка: сколько шагов и куда ведёт каждый.
-      return await fetch(url, {
-        redirect: 'manual',
-        signal: AbortSignal.timeout(timeoutMs),
-        // В заголовках HTTP допустима только латиница: кириллица здесь падает с ошибкой.
-        headers: { 'user-agent': 'SEO-Revizor/0.1 (site audit bot)' },
-      })
-    } catch (error) {
-      lastError = error
-      // Таймаут по нашему сигналу — это уже вердикт, повторять смысла нет.
-      if (error.name === 'TimeoutError') throw error
-      if (attempt < attempts) await new Promise((resolve) => setTimeout(resolve, 400))
-    }
-  }
-
-  throw lastError
-}
 
 /**
  * @param {string} url  полный адрес со схемой
@@ -62,7 +32,10 @@ export async function checkUrl(url, options = {}) {
 
   try {
     for (let hop = 0; hop <= maxHops; hop++) {
-      const response = await request(current, timeoutMs)
+      // redirect: 'manual' — ключевой момент. По умолчанию fetch сам проходит
+      // все редиректы, и мы бы увидели только конечную страницу. А нам нужна
+      // именно цепочка: сколько шагов и куда ведёт каждый.
+      const response = await request(current, { timeoutMs, redirect: 'manual' })
       const location = response.headers.get('location')
 
       chain.push({
@@ -71,7 +44,6 @@ export async function checkUrl(url, options = {}) {
         location: location ? new URL(location, current).href : null,
       })
 
-      // 3xx с заголовком Location — идём дальше по цепочке
       if (response.status >= 300 && response.status < 400 && location) {
         const next = new URL(location, current).href
 
@@ -102,10 +74,7 @@ export async function checkUrl(url, options = {}) {
     return {
       url,
       ok: false,
-      error:
-        error.name === 'TimeoutError'
-          ? `Нет ответа за ${timeoutMs} мс`
-          : `${error.message || error}${error.cause?.code ? ` (${error.cause.code})` : ''}`,
+      error: describeError(error, timeoutMs),
       chain,
       responseMs: Date.now() - startedAt,
       notes: ['Адрес не открылся. Проверьте написание, DNS и доступность сервера.'],
@@ -136,6 +105,9 @@ function buildResult(requestedUrl, chain, startedAt, headers, extraNotes = []) {
     }
     if (headers['x-powered-by']) {
       notes.push(`Заголовок X-Powered-By раскрывает платформу: «${headers['x-powered-by']}». Его принято убирать.`)
+    }
+    if (headers['x-robots-tag'] && /noindex/i.test(headers['x-robots-tag'])) {
+      notes.push('В заголовке X-Robots-Tag стоит noindex — страница исключена из поиска на уровне сервера.')
     }
     if (requestedUrl.startsWith('https://') && !headers['strict-transport-security']) {
       notes.push('Нет заголовка Strict-Transport-Security. Браузер не запомнит, что сайт открывается только по https.')

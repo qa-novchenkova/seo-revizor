@@ -2,10 +2,13 @@
  * Разговор с сервером напрямую, без Claude Code.
  *
  * Запускаем src/server.js как обычную программу и пишем ему в стандартный ввод
- * те же сообщения, которые послал бы настоящий клиент. Это позволяет увидеть
- * протокол своими глазами и убедиться, что сервер отвечает.
+ * те же сообщения, которые послал бы настоящий клиент.
  *
- *   node test/mcp.js [адрес]
+ *   node test/mcp.js [адрес сайта]
+ *
+ * ВАЖНО: последовательность вызовов здесь прописана руками. Это ещё не агент.
+ * Агент появится на следующем этапе: там порядок будет выбирать модель,
+ * глядя на результат предыдущего шага.
  */
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -18,7 +21,6 @@ const server = spawn(process.execPath, [path.join(root, 'src', 'server.js')], {
   stdio: ['pipe', 'pipe', 'pipe'],
 })
 
-// сервер пишет отладку в stderr — показываем её отдельно
 server.stderr.on('data', (chunk) => process.stdout.write('  [сервер] ' + chunk.toString().trim() + '\n'))
 
 // Сообщения разделяются переносом строки, каждое — одна строка JSON
@@ -54,6 +56,25 @@ function notify(method, params) {
   server.stdin.write(JSON.stringify({ jsonrpc: '2.0', method, params }) + '\n')
 }
 
+/** Вызов инструмента: возвращает уже разобранный результат. */
+async function call(name, args) {
+  const answer = await send('tools/call', { name, arguments: args })
+  if (answer.result.isError) {
+    console.log('   ОШИБКА:', answer.result.content[0].text)
+    return null
+  }
+  return JSON.parse(answer.result.content[0].text)
+}
+
+function showNotes(data, limit = 3) {
+  if (!data?.notes?.length) {
+    console.log('   замечаний нет')
+    return
+  }
+  for (const note of data.notes.slice(0, limit)) console.log('   • ' + note)
+  if (data.notes.length > limit) console.log(`   … и ещё ${data.notes.length - limit}`)
+}
+
 // ── 1. Рукопожатие ───────────────────────────────────────────────────────────
 console.log('\n1. Рукопожатие')
 const hello = await send('initialize', {
@@ -67,21 +88,37 @@ notify('notifications/initialized')
 // ── 2. Что ты умеешь ─────────────────────────────────────────────────────────
 console.log('\n2. Список инструментов')
 const list = await send('tools/list', {})
-for (const tool of list.result.tools) {
-  console.log(`   • ${tool.name} — ${tool.description.slice(0, 70)}…`)
-  console.log(`     принимает: ${Object.keys(tool.inputSchema.properties || {}).join(', ')}`)
+for (const item of list.result.tools) {
+  console.log(`   • ${item.name.padEnd(14)} ${Object.keys(item.inputSchema.properties || {}).join(', ')}`)
 }
 
-// ── 3. Вызов ─────────────────────────────────────────────────────────────────
-const target = process.argv[2] || 'https://qa-novchenkova.github.io/studio/'
-console.log(`\n3. Вызов check_url для ${target}`)
-const answer = await send('tools/call', { name: 'check_url', arguments: { url: target } })
-const data = JSON.parse(answer.result.content[0].text)
+// ── 3. Цепочка вызовов ───────────────────────────────────────────────────────
+const site = process.argv[2] || 'https://vitejs.dev/'
+console.log(`\n3. Разбор сайта ${site}`)
 
-console.log('   код ответа:', data.status)
-console.log('   редиректов:', data.redirects)
-console.log('   замечаний: ', data.notes.length)
-for (const note of data.notes) console.log('     •', note)
+console.log('\n   шаг 1 — robots.txt')
+const robots = await call('check_robots', { url: site })
+console.log(`   существует: ${robots?.exists ? 'да' : 'нет'}, карт сайта в нём: ${robots?.sitemaps?.length ?? 0}`)
+showNotes(robots)
 
-console.log('\nГотово. Сервер отвечает по протоколу.\n')
+console.log('\n   шаг 2 — карта сайта')
+// Адрес карты берём из robots.txt, если он там указан. Именно так и работает
+// цепочка: результат предыдущего шага определяет аргумент следующего.
+const sitemapTarget = robots?.sitemaps?.[0] || site
+const sitemap = await call('check_sitemap', { url: sitemapTarget, limit: 5 })
+console.log(`   тип: ${sitemap?.type}, адресов: ${sitemap?.total}`)
+showNotes(sitemap)
+
+const sample = sitemap?.urls?.[0] || site
+console.log(`\n   шаг 3 — код ответа для ${sample}`)
+const url = await call('check_url', { url: sample })
+console.log(`   код: ${url?.status}, редиректов: ${url?.redirects}`)
+showNotes(url)
+
+console.log(`\n   шаг 4 — мета-теги той же страницы`)
+const meta = await call('check_meta', { url: sample })
+console.log(`   title: ${meta?.title?.length ?? 0} симв., H1: ${meta?.h1?.length ?? 0}`)
+showNotes(meta)
+
+console.log('\nГотово. Все четыре инструмента отвечают по протоколу.\n')
 server.kill()

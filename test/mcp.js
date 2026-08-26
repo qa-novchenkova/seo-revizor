@@ -106,17 +106,20 @@ console.log('\n   шаг 2 — карта сайта')
 // цепочка: результат предыдущего шага определяет аргумент следующего.
 const sitemapTarget = robots?.sitemaps?.[0] || site
 const sitemap = await call('check_sitemap', { url: sitemapTarget, limit: 5 })
-console.log(`   тип: ${sitemap?.type}, адресов: ${sitemap?.total}`)
+console.log(`   тип: ${sitemap?.type}, адресов: ${sitemap?.total}, типов страниц: ${sitemap?.pageTypes?.length ?? 0}`)
 showNotes(sitemap)
 
-const sample = sitemap?.urls?.[0] || site
-console.log(`\n   шаг 3 — код ответа для ${sample}`)
-const url = await call('check_url', { url: sample })
+// Адрес берём не первый попавшийся, а из представительной выборки: иначе
+// на большом сайте проверим десять однотипных страниц подряд.
+const picked = sitemap?.sample?.[1] || sitemap?.sample?.[0] || { url: site, shape: 'главная' }
+console.log(`\n   шаг 3 — код ответа, тип страницы «${picked.shape}»`)
+console.log(`   ${picked.url}`)
+const url = await call('check_url', { url: picked.url })
 console.log(`   код: ${url?.status}, редиректов: ${url?.redirects}`)
 showNotes(url)
 
 console.log(`\n   шаг 4 — мета-теги той же страницы`)
-const meta = await call('check_meta', { url: sample })
+const meta = await call('check_meta', { url: picked.url })
 console.log(`   title: ${meta?.title?.length ?? 0} симв., H1: ${meta?.h1?.length ?? 0}`)
 showNotes(meta)
 

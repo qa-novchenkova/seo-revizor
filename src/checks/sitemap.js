@@ -8,12 +8,13 @@
 import * as cheerio from 'cheerio'
 import { fetchText, describeError, originOf } from '../lib/http.js'
 import { counted, FORMS } from '../lib/text.js'
+import { pickSample } from '../lib/sample.js'
 
 /** Сколько вложенных карт разбирать. Больше — долго и обычно не нужно. */
 const MAX_NESTED = 5
 
 export async function checkSitemap(target, options = {}) {
-  const { timeoutMs = 15000, limit = 50 } = options
+  const { timeoutMs = 15000, limit = 50, sampleSize = 8 } = options
 
   // Можно передать и адрес сайта, и адрес самой карты
   const sitemapUrl = /\.xml($|\?)/i.test(target) ? target : originOf(target) + 'sitemap.xml'
@@ -120,6 +121,20 @@ export async function checkSitemap(target, options = {}) {
     )
   }
 
+  // Представительная выборка: по одной странице каждого типа, а не первые
+  // подряд. Именно её стоит брать для дальнейшей поштучной проверки.
+  const sample = pickSample(urls, { limit: sampleSize, origin: new URL(sitemapUrl).origin + '/' })
+
+  // Адреса чужих доменов в подсчёте структуры не участвуют: иначе после
+  // переезда сайта проверка решит, что у него плоский каталог.
+  const ownGroups = sample.groups.filter((group) => !group.shape.startsWith('другой домен'))
+  if (ownGroups.length === 1 && urls.length - foreign.length > 20) {
+    notes.push(
+      'Все адреса в карте одного вида: отдельной структуры разделов нет. ' +
+        'Обычно это признак плоского каталога без вложенности.',
+    )
+  }
+
   return {
     url: sitemapUrl,
     ok: true,
@@ -127,6 +142,8 @@ export async function checkSitemap(target, options = {}) {
     type: parsed.type,
     total: urls.length,
     nested,
+    pageTypes: sample.groups.slice(0, 12),
+    sample: sample.pages,
     urls: urls.slice(0, limit).map((item) => item.loc),
     withoutLastmod,
     notes,

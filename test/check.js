@@ -107,10 +107,18 @@ function printSitemap(r) {
     for (const child of r.nested) console.log(`    ${String(child.count).padStart(6)}  ${child.url}`)
   }
 
-  if (r.urls.length) {
-    console.log('\n  первые адреса:')
-    for (const url of r.urls.slice(0, 8)) console.log(`    ${url}`)
-    if (r.total > 8) console.log(`    … и ещё ${r.total - 8}`)
+  if (r.pageTypes?.length) {
+    console.log('\n  типы страниц:')
+    for (const type of r.pageTypes) {
+      console.log(`    ${String(type.total).padStart(6)}  ${type.shape}`)
+    }
+  }
+
+  if (r.sample?.length) {
+    console.log('\n  выборка для проверки — по одной странице каждого типа:')
+    for (const page of r.sample) {
+      console.log(`    ${page.shape.padEnd(22)} ${page.url}`)
+    }
   }
 }
 

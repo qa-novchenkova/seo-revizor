@@ -1,0 +1,69 @@
+# Собирает страницу проекта и публикует её на GitHub Pages.
+#
+# Смысл в том, чтобы готовый файл не хранился в репозитории: страницу
+# каждый раз собирает сам GitHub из текущих правил, инструментов и чек-листов.
+# Забыть пересобрать после правки правила теперь невозможно.
+
+name: Страница проекта
+
+on:
+  push:
+    branches: [main]
+  # Кнопка «запустить вручную» на вкладке Actions — на случай, если нужно
+  # переопубликовать страницу, ничего не меняя в коде.
+  workflow_dispatch:
+
+# Права ровно те, что нужны публикации, и ни одним больше.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Если коммиты идут один за другим, публикуется последний,
+# а предыдущая сборка отменяется — иначе они гонятся наперегонки.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Сборка
+    runs-on: ubuntu-latest
+    steps:
+      - name: Забрать код
+        uses: actions/checkout@v4
+
+      - name: Поставить Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Проверки, которым не нужны ни сеть, ни ключи
+        run: npm test
+
+      - name: Собрать страницу
+        run: npm run site
+
+      - name: Подготовить публикацию
+        uses: actions/configure-pages@v5
+
+      - name: Загрузить собранное
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+  deploy:
+    name: Публикация
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Опубликовать
+        id: deployment
+        uses: actions/deploy-pages@v4

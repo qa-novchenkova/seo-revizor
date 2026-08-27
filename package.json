@@ -9,7 +9,8 @@
     "mcp": "node test/mcp.js",
     "audit": "node test/audit.js",
     "loop": "node test/loop.js",
-    "report": "node test/report.js"
+    "report": "node test/report.js",
+    "keys": "node test/keys.js"
   },
   "keywords": [],
   "author": "",

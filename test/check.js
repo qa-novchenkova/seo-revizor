@@ -9,6 +9,7 @@
  *   node test/check.js robots  https://example.com/
  *   node test/check.js sitemap https://example.com/
  */
+import { loadEnv } from '../src/lib/env.js'
 import { checkUrl } from '../src/checks/url.js'
 import { checkMeta } from '../src/checks/meta.js'
 import { checkRobots } from '../src/checks/robots.js'
@@ -20,6 +21,9 @@ import { checkAnalytics } from '../src/checks/analytics.js'
 import { checkContent } from '../src/checks/content.js'
 import { checkSpeed } from '../src/checks/speed.js'
 import { SEVERITY_LABELS, SEVERITIES } from '../src/rules/index.js'
+
+// Ключи берём из .env, если он есть рядом с проектом
+loadEnv()
 
 const CHECKS = {
   url: { run: checkUrl, print: printUrl },
@@ -49,6 +53,7 @@ console.log('  ' + '─'.repeat(Math.min(76, Math.max(20, (result.url || target)
 
 if (result.ok === false) {
   console.log('  не получилось:', result.error || `код ${result.status}`)
+  if (result.hint) console.log('  ' + result.hint)
 } else {
   CHECKS[name].print(result)
 }

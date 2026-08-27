@@ -10,11 +10,15 @@
  * сайту уже был прогон, добавляется раздел «что изменилось».
  */
 
+import { loadEnv } from '../src/lib/env.js'
 import { audit, consoleReporter } from '../src/agent.js'
 import { toMarkdown, toHtml } from '../src/report.js'
 import { saveRun, previousRun, compare } from '../src/store.js'
 import { htmlToPdf, findBrowser } from '../src/pdf.js'
 import { SEVERITY_LABELS, SEVERITIES } from '../src/rules/index.js'
+
+// Ключи берём из .env, если он есть рядом с проектом
+loadEnv()
 
 const site = process.argv[2]
 

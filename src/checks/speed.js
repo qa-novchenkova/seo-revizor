@@ -30,6 +30,7 @@ export async function checkSpeed(url, options = {}) {
       url,
       ok: false,
       needsKey: true,
+      error: 'Нет ключа PAGESPEED_KEY — скорость не измерялась',
       hint:
         'Ключ бесплатный: console.cloud.google.com → включить PageSpeed Insights API → создать ключ. ' +
         'Дальше положить его в переменную PAGESPEED_KEY.',
@@ -47,10 +48,20 @@ export async function checkSpeed(url, options = {}) {
     const response = await fetch(request, { signal: AbortSignal.timeout(timeoutMs) })
     if (!response.ok) {
       const text = await response.text()
+      let detail = text.slice(0, 160)
+      try {
+        detail = JSON.parse(text).error?.message || detail
+      } catch {
+        // ответ не в JSON — оставляем как есть
+      }
       return {
         url,
         ok: false,
-        error: `Сервис измерения ответил ${response.status}: ${text.slice(0, 200)}`,
+        error: `Сервис измерения ответил ${response.status}: ${detail}`,
+        hint:
+          response.status === 400
+            ? 'Скорее всего ключ неверный или у него стоят ограничения, под которые этот запрос не подходит.'
+            : null,
         findings: [],
         summary: {},
       }

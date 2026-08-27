@@ -11,9 +11,16 @@
     "loop": "node test/loop.js",
     "report": "node test/report.js",
     "keys": "node test/keys.js",
-    "speed": "node test/speed.js"
+    "speed": "node test/speed.js",
+    "site": "node tools/build-site.js"
   },
-  "keywords": ["mcp", "seo", "audit", "agent", "claude"],
+  "keywords": [
+    "mcp",
+    "seo",
+    "audit",
+    "agent",
+    "claude"
+  ],
   "author": "Варвара Новченкова",
   "license": "MIT",
   "type": "module",

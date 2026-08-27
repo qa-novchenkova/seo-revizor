@@ -8,6 +8,8 @@
  * ВАЖНО: общение идёт через стандартный ввод-вывод. Обычный console.log
  * пишет в тот же поток и ломает протокол. Для отладки — только console.error.
  */
+import { pathToFileURL } from 'node:url'
+
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod'
@@ -29,11 +31,20 @@ import { allRules, rulesByArea } from './rules/index.js'
 const server = new McpServer({ name: 'seo-revizor', version: '0.6.0' })
 
 /**
+ * Список зарегистрированных инструментов — то же самое, что сервер отдаёт
+ * на запрос «какие у тебя есть инструменты», только без протокола вокруг.
+ * Из него собирается страница проекта, чтобы описания не разъезжались с кодом.
+ */
+export const TOOLS = []
+
+/**
  * Небольшая обёртка, чтобы не повторять одно и то же в каждом инструменте.
  * Отвечает за две вещи: упаковку результата в формат протокола и за то,
  * чтобы упавшая проверка вернула понятный текст, а не уронила сервер.
  */
 function tool(name, meta, run) {
+  TOOLS.push({ name, title: meta.title, description: meta.description })
+
   server.registerTool(name, meta, async (args) => {
     try {
       const result = await run(args)
@@ -234,7 +245,13 @@ tool(
   },
 )
 
-// stdio — это способ связи: клиент запускает сервер как обычную программу
-// и разговаривает с ним через её ввод и вывод. Никаких портов и сети.
-await server.connect(new StdioServerTransport())
-console.error(`Ревизор запущен, инструментов: 11, правил в чек-листе: ${allRules().length}`)
+// Запускаемся только когда файл вызвали напрямую: `node src/server.js`.
+// Если этот же файл просто читают ради списка TOOLS — сервер поднимать не нужно.
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  // stdio — это способ связи: клиент запускает сервер как обычную программу
+  // и разговаривает с ним через её ввод и вывод. Никаких портов и сети.
+  await server.connect(new StdioServerTransport())
+  console.error(
+    `Ревизор запущен, инструментов: ${TOOLS.length}, правил в чек-листе: ${allRules().length}`,
+  )
+}

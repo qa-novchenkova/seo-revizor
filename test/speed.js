@@ -18,7 +18,7 @@ const sample = {
     'server-response-time': { numericValue: 40, displayValue: 'Root document took 40 ms' },
     'total-byte-weight': { numericValue: 3.2 * 1024 * 1024 },
     'largest-contentful-paint-element': {
-      details: { items: [{ items: [{ node: { nodeLabel: 'Помощник по продвижению' } }] }] },
+      details: { items: [{ items: [{ node: { nodeLabel: 'Заголовок первого экрана' } }] }] },
     },
     'render-blocking-resources': { score: 0.5, title: 'Устраните ресурсы, блокирующие отображение', details: { overallSavingsMs: 850 } },
     'modern-image-formats': { score: 0.3, title: 'Используйте современные форматы изображений', details: { overallSavingsBytes: 420 * 1024 } },
@@ -55,7 +55,7 @@ assert.ok(ids.includes('page-heavy'), '3,2 МБ — тяжёлая страни�
 console.log('  ✓ пороги срабатывают там, где надо, и молчат где не надо')
 
 // ── причина, а не только симптом ─────────────────────────────────────────────
-assert.equal(result.lcpElement, 'Помощник по продвижению', 'должен определяться самый крупный элемент')
+assert.equal(result.lcpElement, 'Заголовок первого экрана', 'должен определяться самый крупный элемент')
 assert.ok(ids.includes('lcp-element'), 'при медленном LCP должно называться, что именно медленное')
 assert.ok(ids.includes('lcp-image-lazy'), 'отложенная загрузка главной картинки — отдельная находка')
 console.log('  ✓ называется не только симптом, но и причина')

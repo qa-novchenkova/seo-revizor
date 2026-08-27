@@ -30,15 +30,17 @@ const REPO = 'https://github.com/qa-novchenkova/seo-revizor'
 
 /** Как называется каждый вид проверки и что он означает. */
 const KINDS = {
-  auto: { label: 'авто', hint: 'делает программа' },
-  both: { label: 'авто + глазами', hint: 'данные собирает программа, решение за человеком' },
-  manual: { label: 'глазами', hint: 'только вручную' },
-  service: { label: 'сервисы', hint: 'нужны внешние данные' },
+  auto: { label: 'авто', hint: 'выполняет сервер' },
+  both: { label: 'авто + ручная', hint: 'данные собирает сервер, оценивает специалист' },
+  manual: { label: 'ручная', hint: 'только ручная проверка' },
+  service: { label: 'сервис', hint: 'нужны данные внешнего сервиса' },
 }
 
 // ── данные ───────────────────────────────────────────────────────────────────
 
 const checklist = JSON.parse(readFileSync(path.join(root, 'src/checklist/checklist.json'), 'utf8'))
+const glossary = JSON.parse(readFileSync(path.join(root, 'src/glossary.json'), 'utf8'))
+const terms = glossary.groups.flatMap((group) => group.terms)
 const rules = allRules()
 const areas = rulesByArea()
 const steps = readSteps()
@@ -105,9 +107,11 @@ ${toolsSection()}
 ${orderSection()}
 ${checklistSection()}
 ${rulesSection()}
+${glossarySection()}
 ${startSection()}
 </main>
 ${footer()}
+${toTop()}
 <script>${script()}</script>
 </body>
 </html>
@@ -125,10 +129,11 @@ function hero() {
   <div class="wrap hero__in">
     <div class="hero__text">
       <p class="kicker">${icon('spark')} MCP-сервер · агент · открытый код</p>
-      <h1>Сайт<br><em>под лупой</em></h1>
-      <p class="lede">${checks.length} проверок вместо списка в блокноте. Агент сам решает,
-      что смотреть дальше, и собирает отчёт, где по каждой находке сказано три вещи:
-      <b>что не так</b>, <b>почему это плохо</b> и <b>что конкретно сделать</b>.</p>
+      <h1>SEO-<em>ревизор</em></h1>
+      <p class="lede">Технический аудит сайта по чек-листу из ${checks.length} пунктов:
+      индексация, зеркала, дубли, разметка, перелинковка, Core Web Vitals, безопасность.
+      Каждая ошибка в отчёте описана по трём пунктам:
+      <b>в чём дефект</b>, <b>чем он вреден</b>, <b>как исправить</b>.</p>
 
       <p class="cta">
         <a class="btn btn--main" href="${REPO}">${icon('github')} Открыть код</a>
@@ -140,10 +145,10 @@ function hero() {
   </div>
 
   <dl class="facts wrap">
-    ${fact(TOOLS.length, 'инструментов', 'code')}
-    ${fact(rules.length, 'правил в коде', 'rules')}
-    ${fact(checks.length, 'пунктов чек-листа', 'check')}
-    ${fact(automated, 'делает программа', 'bot')}
+    ${fact(TOOLS.length, 'инструментов сервера', 'code')}
+    ${fact(rules.length, 'правил в чек-листе', 'rules')}
+    ${fact(checks.length, 'пунктов аудита', 'check')}
+    ${fact(automated, 'автопроверок', 'bot')}
   </dl>
 </header>`
 }
@@ -213,16 +218,20 @@ function ticker() {
 
 function nav() {
   const items = [
-    ['#about', 'Что это'],
-    ['#tools', 'Инструменты'],
-    ['#order', 'Как думает агент'],
-    ['#checklist', 'Чек-листы'],
-    ['#rules', 'Правила'],
-    ['#start', 'Запуск'],
+    ['#about', 'Устройство', 'code'],
+    ['#tools', 'Инструменты', 'rules'],
+    ['#order', 'Цикл агента', 'bot'],
+    ['#checklist', 'Чек-листы', 'check'],
+    ['#rules', 'Правила', 'content'],
+    ['#glossary', 'Глоссарий', 'meta'],
+    ['#start', 'Запуск', 'code'],
   ]
 
   return `<nav class="nav"><div class="wrap">
-    ${items.map(([href, label]) => `<a href="${href}">${esc(label)}</a>`).join('')}
+    <span class="nav__mark">${icon('security')} Ревизор</span>
+    <div class="nav__links">
+      ${items.map(([href, label, ic]) => `<a href="${href}">${icon(ic)}${esc(label)}</a>`).join('')}
+    </div>
   </div></nav>`
 }
 
@@ -300,52 +309,67 @@ function orderSection() {
   </div></section>`
 }
 
-/** Схема цикла: точка бежит по кругу и возвращается на второй шаг. */
+/**
+ * Схема цикла.
+ *
+ * Циклична здесь не вся цепочка, а только средние три шага: выбор инструмента,
+ * вызов, оценка результата. Задача входит в цикл один раз, отчёт из него
+ * выходит один раз. Точка бежит ровно по замкнутой части, а подписи вынесены
+ * ниже линий, чтобы стрелки их не перекрывали.
+ */
 function loop() {
   const nodes = [
-    [70, 'Задача', 'проверь сайт'],
-    [250, 'Выбор', 'какой инструмент'],
-    [430, 'Данные', 'ответ инструмента'],
-    [610, 'Оценка', 'хватит или нет'],
+    [10, 150, '1', 'Задача', 'проверь сайт', 'enter'],
+    [205, 170, '2', 'Выбор', 'какой инструмент вызвать', 'ring'],
+    [420, 170, '3', 'Вызов', 'сервер выполняет проверку', 'ring'],
+    [635, 170, '4', 'Оценка', 'данных хватает?', 'ring'],
   ]
 
   const boxes = nodes
     .map(
-      ([x, title, note], i) => `<g class="loop__node" style="--wait:${i * 160}ms">
-      <rect x="${x}" y="54" width="140" height="62" rx="12"/>
-      <text x="${x + 70}" y="80" class="loop__t">${esc(title)}</text>
-      <text x="${x + 70}" y="99" class="loop__s">${esc(note)}</text>
+      ([x, width, step, title, note, kind], i) => `<g class="loop__node loop__node--${kind}" style="--wait:${i * 150}ms">
+      <rect x="${x}" y="40" width="${width}" height="66" rx="13"/>
+      <text x="${x + width / 2}" y="66" class="loop__t"><tspan class="loop__n">${step}</tspan> ${esc(title)}</text>
+      <text x="${x + width / 2}" y="87" class="loop__s">${esc(note)}</text>
     </g>`,
     )
     .join('')
 
   return `<div class="loop rise">
-  <svg viewBox="0 0 780 210" fill="none" role="img"
-       aria-label="Схема работы агента: задача, выбор инструмента, данные, оценка — и либо новый круг, либо отчёт">
+  <svg viewBox="0 0 820 290" fill="none" role="img"
+       aria-label="Схема работы агента. Задача входит в цикл. Внутри цикла три шага: выбор инструмента, вызов проверки, оценка данных. Если данных не хватает, цикл повторяется с выбора. Когда хватает, собирается отчёт.">
     <defs>
-      <marker id="tip" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <marker id="tip" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto">
         <path d="M0 0 10 5 0 10z" fill="currentColor"/>
       </marker>
-      <path id="ring" d="M680 122 V166 H320 V126"/>
     </defs>
+
+    <rect class="loop__zone" x="192" y="26" width="626" height="162" rx="18"/>
+    <text class="loop__zonelabel" x="806" y="46" text-anchor="end">цикл</text>
 
     ${boxes}
 
-    <g class="loop__wire">
-      <path d="M214 85h30" marker-end="url(#tip)"/>
-      <path d="M394 85h30" marker-end="url(#tip)"/>
-      <path d="M574 85h30" marker-end="url(#tip)"/>
-      <path d="M680 122 V166 H320 V126" marker-end="url(#tip)"/>
-      <path d="M740 122 V190 H430" marker-end="url(#tip)" class="loop__wire--out"/>
+    <g class="loop__node loop__node--out" style="--wait:600ms">
+      <rect x="635" y="200" width="170" height="52" rx="13"/>
+      <text x="720" y="231" class="loop__t">Отчёт</text>
     </g>
 
-    <circle class="loop__spark" r="5.5">
-      <animateMotion dur="3.2s" repeatCount="indefinite"
-        path="M140 116 V166 H320 V126"/>
+    <g class="loop__wire">
+      <path d="M160 73h38" marker-end="url(#tip)"/>
+      <path d="M375 73h38" marker-end="url(#tip)"/>
+      <path d="M590 73h38" marker-end="url(#tip)"/>
+      <path d="M700 106 V148 H290 V113" marker-end="url(#tip)"/>
+    </g>
+    <g class="loop__wire loop__wire--out">
+      <path d="M760 106 V194" marker-end="url(#tip)"/>
+    </g>
+
+    <circle class="loop__spark" r="6">
+      <animateMotion dur="5.4s" repeatCount="indefinite" path="M290 73 H505 H700 V148 H290 Z"/>
     </circle>
 
-    <text x="500" y="160" class="loop__note">не хватило — идём на следующий круг</text>
-    <text x="436" y="194" class="loop__note loop__note--out" text-anchor="start">хватило — собираем отчёт</text>
+    <text x="470" y="170" class="loop__note">данных мало — ещё круг</text>
+    <text x="720" y="274" class="loop__note">данных хватает</text>
   </svg>
 </div>`
 }
@@ -357,20 +381,31 @@ function checklistSection() {
     .map(([kind, { label, hint }]) => `<li><span class="tag tag--${kind}">${esc(label)}</span> ${esc(hint)}</li>`)
     .join('')
 
+  const chips = checklist.sections
+    .map((section) => {
+      const [light, dark] = SECTION_TONES[section.id] || ['#0F7A72', '#4FD1C3']
+      return `<a class="chip" href="#cl-${section.id}" style="--tone:${light}; --tone-dark:${dark}">
+      ${icon(SECTION_ICONS[section.id] || 'check')}${esc(section.title)}<b>${section.checks.length}</b>
+    </a>`
+    })
+    .join('')
+
   return `<section class="sec sec--alt" id="checklist"><div class="wrap">
   <h2 class="rise">Чек-листы <span class="badge">${checks.length}</span></h2>
   <p class="intro rise">Полный список в ${plural(checklist.sections.length, ['разделе', 'разделах', 'разделах'])}.
-  У каждой проверки сказано, почему это важно и как проверяется. Автоматизировать удалось
-  <b>${automated}</b>; оставшиеся <b>${manual}</b> требуют человека или платных сервисов — и это
-  не недоделка, а честная граница: понятен ли заголовок категории живому человеку,
-  программа оценить не может.</p>
+  У каждого пункта указано, чем дефект вреден и каким способом проверяется. Автоматизировано
+  <b>${automated}</b> пунктов; остальные <b>${manual}</b> требуют ручной проверки или платных сервисов.
+  Это не пробел, а граница метода: оценить, раскрывает ли заголовок категории её содержимое,
+  можно только глазами.</p>
+
+  <nav class="chips rise" aria-label="Разделы чек-листа">${chips}</nav>
 
   <ul class="legend rise">${legend}</ul>
 
-  <div class="filters rise" role="group" aria-label="Отбор проверок">
-    <button type="button" data-filter="all" class="on">Все <b>${checks.length}</b></button>
-    <button type="button" data-filter="machine">${icon('bot')} Делает программа <b>${automated}</b></button>
-    <button type="button" data-filter="human">${icon('eye')} Нужен человек <b>${manual}</b></button>
+  <div class="filters rise" role="group" aria-label="Отбор пунктов">
+    <button type="button" data-filter="all" class="on">${icon('rules')} Все <b>${checks.length}</b></button>
+    <button type="button" data-filter="machine">${icon('bot')} Автопроверки <b>${automated}</b></button>
+    <button type="button" data-filter="human">${icon('eye')} Ручные <b>${manual}</b></button>
   </div>
 
   <div class="lists" data-mode="all">
@@ -384,7 +419,8 @@ function checklistBlock(section) {
   const share = Math.round((machine / section.checks.length) * 100)
   const [light, dark] = SECTION_TONES[section.id] || ['#1A6F69', '#4FB8AF']
 
-  return `<section class="block rise" data-machine="${machine}" data-human="${section.checks.length - machine}"
+  return `<section class="block rise" id="cl-${section.id}"
+  data-machine="${machine}" data-human="${section.checks.length - machine}"
   style="--tone:${light}; --tone-dark:${dark}">
   <header class="block__head">
     <span class="block__ico">${icon(SECTION_ICONS[section.id] || 'check')}</span>
@@ -395,10 +431,10 @@ function checklistBlock(section) {
   </header>
 
   <div class="barline">
-    <span class="bar" role="img" aria-label="Программа делает ${share} процентов проверок этого раздела">
+    <span class="bar" role="img" aria-label="Автоматизировано ${share} процентов пунктов раздела">
       <i class="bar__fill" style="--share:${share}%"></i>
     </span>
-    <span class="bar__text"><b>${share}%</b> делает программа</span>
+    <span class="bar__text"><b>${share}%</b> автоматизировано</span>
   </div>
 
   <ol class="checks">
@@ -464,7 +500,9 @@ function rulesSection() {
 
   <ul class="rulebars rise">${rows}</ul>
 
-  <h3 class="sub rise">Как выглядит находка</h3>
+  <h3 class="sub rise">Как выглядит ошибка в отчёте</h3>
+  <p class="intro rise">Формат один для всех ${rules.length} правил: заголовок дефекта,
+  что именно обнаружено, чем это вредит, каким действием устраняется.</p>
   <div class="findings">${examples}</div>
   </div></section>`
 }
@@ -476,9 +514,48 @@ function exampleFinding(rule) {
       <h4>${esc(rule.title)}</h4>
     </div>
     <p class="finding__msg">${esc(rule.message)}</p>
-    <p class="finding__row"><span>Почему это плохо</span>${esc(rule.why)}</p>
-    <p class="finding__row"><span>Что делать</span>${esc(rule.fix)}</p>
+    <p class="finding__row"><span>Чем вредит</span>${esc(rule.why)}</p>
+    <p class="finding__row"><span>Как исправить</span>${esc(rule.fix)}</p>
   </article>`
+}
+
+// ── глоссарий ────────────────────────────────────────────────────────────────
+
+function glossarySection() {
+  const groups = glossary.groups
+    .map(
+      (group, i) => `<section class="gloss rise" id="gl-${group.id}" style="--wait:${(i % 2) * 70}ms">
+    <h3>${esc(group.title)} <span class="count count--plain">${group.terms.length}</span></h3>
+    <p class="gloss__intro">${esc(group.intro)}</p>
+    <dl class="gloss__list">
+      ${group.terms.map(termItem).join('')}
+    </dl>
+  </section>`,
+    )
+    .join('')
+
+  const jump = glossary.groups
+    .map((group) => `<a class="chip chip--plain" href="#gl-${group.id}">${esc(group.title)}<b>${group.terms.length}</b></a>`)
+    .join('')
+
+  return `<section class="sec" id="glossary"><div class="wrap">
+  <h2 class="rise">Глоссарий <span class="badge">${terms.length}</span></h2>
+  <p class="intro rise">Термины, которые встречаются в отчётах и в описании проекта —
+  и те, что относятся к устройству агента, и те, что относятся к техническому SEO.
+  Без расшифровки половина замечаний аудита выглядит набором сокращений.</p>
+
+  <nav class="chips rise" aria-label="Разделы глоссария">${jump}</nav>
+
+  <div class="glosses">${groups}</div>
+  </div></section>`
+}
+
+function termItem(item) {
+  const full = item.full ? `<span class="gloss__full">${esc(item.full)}</span>` : ''
+  return `<div class="gloss__item">
+    <dt>${esc(item.term)}${full}</dt>
+    <dd>${esc(item.text)}</dd>
+  </div>`
 }
 
 // ── запуск ───────────────────────────────────────────────────────────────────
@@ -504,13 +581,79 @@ npm run check meta https://example.com/</code></pre>
 }
 
 function footer() {
-  return `<footer class="foot"><div class="wrap">
-  <p class="foot__big">${icon('github')} <a href="${REPO}">github.com/qa-novchenkova/seo-revizor</a></p>
-  <p>Открытый код под лицензией MIT.</p>
-  <p class="foot__note">Страница собрана из файлов проекта: инструменты из сервера, правила
-  из чек-листа, порядок из инструкции агенту. Пересобирается сама при каждом изменении кода,
-  поэтому разойтись с ним не может.</p>
-  </div></footer>`
+  const columns = [
+    [
+      'Разделы',
+      [
+        ['#about', 'Устройство'],
+        ['#tools', 'Инструменты сервера'],
+        ['#order', 'Цикл агента'],
+        ['#checklist', 'Чек-листы аудита'],
+        ['#rules', 'Правила и severity'],
+        ['#glossary', 'Глоссарий'],
+      ],
+    ],
+    [
+      'Репозиторий',
+      [
+        [REPO, 'Исходный код'],
+        [`${REPO}#readme`, 'README: устройство'],
+        [`${REPO}/blob/main/AGENT.md`, 'AGENT.md: задание агенту'],
+        [`${REPO}/tree/main/src/rules`, 'Правила в файлах данных'],
+        [`${REPO}/blob/main/LICENSE`, 'Лицензия MIT'],
+      ],
+    ],
+  ]
+
+  const links = columns
+    .map(
+      ([title, items]) => `<div class="foot__col">
+      <h3>${esc(title)}</h3>
+      <ul>${items.map(([href, label]) => `<li><a href="${href}">${esc(label)}</a></li>`).join('')}</ul>
+    </div>`,
+    )
+    .join('')
+
+  const numbers = [
+    [TOOLS.length, 'инструментов'],
+    [rules.length, 'правил'],
+    [checks.length, 'пунктов аудита'],
+    [automated, 'автопроверок'],
+    [terms.length, 'терминов'],
+  ]
+    .map(([value, label]) => `<div><b>${value}</b><span>${esc(label)}</span></div>`)
+    .join('')
+
+  return `<footer class="foot">
+  <div class="wrap foot__grid">
+    <div class="foot__about">
+      <p class="foot__big">${icon('security')} SEO-ревизор</p>
+      <p>MCP-сервер и агент для технического аудита сайта. Открытый код под лицензией MIT,
+      Node.js 22+, зависимостей четыре.</p>
+      <p class="foot__link">${icon('github')} <a href="${REPO}">github.com/qa-novchenkova/seo-revizor</a></p>
+    </div>
+    ${links}
+    <div class="foot__col foot__nums">
+      <h3>В цифрах</h3>
+      <div class="foot__numgrid">${numbers}</div>
+    </div>
+  </div>
+  <div class="wrap">
+    <p class="foot__note">Страница собрана из файлов проекта: инструменты — из списка,
+    который сервер отдаёт клиенту, правила — из чек-листа, порядок — из инструкции агенту.
+    Пересобирается при каждом изменении кода, поэтому разойтись с ним не может.</p>
+  </div>
+</footer>`
+}
+
+/** Кнопка возврата наверх — появляется, когда прокрутили заметно вниз. */
+function toTop() {
+  return `<button type="button" class="totop" aria-label="Наверх">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M12 19V5"/><path d="m5.5 11.5 6.5-6.5 6.5 6.5"/>
+  </svg>
+</button>`
 }
 
 // ── поведение ────────────────────────────────────────────────────────────────
@@ -561,6 +704,38 @@ document.querySelectorAll('.num').forEach(function (node) {
   }
   requestAnimationFrame(tick);
 });
+
+// Подсветка раздела, в котором сейчас находимся
+var links = [].slice.call(document.querySelectorAll('.nav__links a'));
+var spots = links
+  .map(function (link) { return document.querySelector(link.getAttribute('href')); })
+  .filter(Boolean);
+
+if (spots.length && 'IntersectionObserver' in window) {
+  var spy = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      links.forEach(function (link) {
+        link.classList.toggle('here', link.getAttribute('href') === '#' + entry.target.id);
+      });
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+  spots.forEach(function (spot) { spy.observe(spot); });
+}
+
+// Кнопка «наверх».
+// Имя переменной намеренно не top: в браузере top — это само окно,
+// и объявление его перезаписать не может.
+var upButton = document.querySelector('.totop');
+if (upButton) {
+  upButton.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
+  });
+
+  var toggleUp = function () { upButton.classList.toggle('shown', window.scrollY > 700); };
+  toggleUp();
+  window.addEventListener('scroll', toggleUp, { passive: true });
+}
 
 // Тем, кто просил не двигать картинки, останавливаем и рисованную анимацию
 if (calm) {
@@ -717,7 +892,7 @@ b { font-weight: 600; }
   background: var(--accent-soft); border-block: 1px solid var(--line);
   overflow: hidden; padding: 11px 0;
 }
-.ticker__row { display: flex; gap: 30px; width: max-content; animation: run 68s linear infinite; }
+.ticker__row { display: flex; gap: 30px; width: max-content; animation: run 130s linear infinite; }
 .ticker:hover .ticker__row { animation-play-state: paused; }
 @keyframes run { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .tick {
@@ -727,14 +902,55 @@ b { font-weight: 600; }
 .tick__ico { width: 15px; height: 15px; color: var(--accent); }
 
 /* ---------- меню ---------- */
-.nav { position: sticky; top: 0; z-index: 6; background: var(--surface); border-bottom: 1px solid var(--line); }
-.nav .wrap { display: flex; gap: 2px; overflow-x: auto; }
-.nav a {
-  padding: 14px 15px; font-size: .88rem; text-decoration: none; font-weight: 500;
-  color: var(--ink-soft); white-space: nowrap; border-bottom: 2px solid transparent;
-  transition: color .15s ease, border-color .15s ease;
+.nav {
+  position: sticky; top: 0; z-index: 6;
+  background: var(--deep); color: #D6E7E4;
+  border-bottom: 1px solid #1C3B37;
+  box-shadow: 0 6px 20px -14px #000A;
 }
-.nav a:hover { color: var(--accent-ink); border-bottom-color: var(--accent); }
+.nav .wrap { display: flex; align-items: center; gap: 20px; overflow-x: auto; }
+.nav__mark {
+  display: inline-flex; align-items: center; gap: 8px; flex: none;
+  font-family: var(--f-head); font-weight: 600; font-size: .93rem; color: #EAF4F2;
+  padding: 13px 0; letter-spacing: -.01em;
+}
+.nav__mark .ico { width: 19px; height: 19px; color: #4FD1C3; }
+.nav__links { display: flex; gap: 4px; }
+.nav a {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 9px 14px; margin: 8px 0; border-radius: 9px;
+  font-size: .87rem; text-decoration: none; font-weight: 500;
+  color: #A9C4C0; white-space: nowrap;
+  transition: color .15s ease, background .15s ease;
+}
+.nav a .ico { width: 16px; height: 16px; opacity: .8; }
+.nav a:hover { color: #EAF4F2; background: #14312D; }
+.nav a.here { color: #06211E; background: #4FD1C3; }
+.nav a.here .ico { opacity: 1; }
+
+/* ---------- кнопки-переходы по разделам ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 26px; }
+.chip {
+  --hue: var(--tone);
+  display: inline-flex; align-items: center; gap: 8px; text-decoration: none;
+  padding: 8px 14px; border-radius: 999px; font-size: .85rem; font-weight: 500;
+  color: var(--ink); border: 1px solid color-mix(in srgb, var(--hue) 42%, transparent);
+  background: color-mix(in srgb, var(--hue) 8%, transparent);
+  transition: background .16s ease, transform .16s ease, border-color .16s ease;
+}
+@media (prefers-color-scheme: dark) { .chip { --hue: var(--tone-dark); } }
+.chip:hover {
+  background: color-mix(in srgb, var(--hue) 15%, transparent);
+  border-color: var(--hue); transform: translateY(-2px);
+}
+/* Цветом раздела красится только значок и рамка: как текст эти краски
+   не набирают нужного контраста на светлой подложке. */
+.chip .ico { width: 17px; height: 17px; color: var(--hue); }
+.chip b {
+  font-family: var(--f-mono); font-size: .7rem; font-weight: 600;
+  color: var(--ink-soft);
+}
+.chip--plain { --tone: var(--accent); --tone-dark: var(--accent); }
 
 /* ---------- разделы ---------- */
 .sec { padding: 74px 0; scroll-margin-top: 54px; }
@@ -807,15 +1023,24 @@ b { font-weight: 600; }
   background: var(--raise); border: 1px solid var(--line); border-radius: 16px;
   padding: 20px 16px; overflow-x: auto; margin-bottom: 10px;
 }
-.loop svg { display: block; min-width: 700px; width: 100%; height: auto; color: var(--line-hard); }
+.loop svg { display: block; min-width: 760px; width: 100%; height: auto; color: var(--line-hard); }
+.loop__zone { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 6 5; opacity: .55; }
+.loop__zonelabel {
+  font-family: var(--f-mono); font-size: 10.5px; font-weight: 600;
+  letter-spacing: .16em; text-transform: uppercase; fill: var(--accent-ink);
+}
 .loop__node rect { fill: var(--surface); stroke: var(--line-hard); stroke-width: 1.4; }
+.loop__node--enter rect { stroke: var(--ink-mute); stroke-dasharray: 5 4; }
+.loop__node--out rect { fill: var(--accent); stroke: var(--accent); }
+.loop__node--out .loop__t { fill: #FFF; }
+@media (prefers-color-scheme: dark) { .loop__node--out .loop__t { fill: #05201D; } }
 .loop__t { font-family: var(--f-body); font-size: 15px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
+.loop__n { font-family: var(--f-mono); font-size: 11px; font-weight: 600; fill: var(--accent-ink); }
 .loop__s { font-family: var(--f-body); font-size: 11.5px; fill: var(--ink-mute); text-anchor: middle; }
-.loop__wire path { stroke: var(--accent); stroke-width: 1.7; color: var(--accent); }
-.loop__wire--out { stroke: var(--ink-mute); color: var(--ink-mute); }
+.loop__wire path { stroke: var(--accent); stroke-width: 1.8; color: var(--accent); }
+.loop__wire--out path { stroke: var(--ink-mute); color: var(--ink-mute); stroke-dasharray: 5 4; }
 .loop__spark { fill: var(--accent); }
 .loop__note { font-family: var(--f-mono); font-size: 11px; fill: var(--ink-mute); text-anchor: middle; }
-.loop__note--out { text-anchor: start; }
 
 /* ---------- порядок ---------- */
 .order { margin: 0; padding: 0; list-style: none; counter-reset: s; }
@@ -983,6 +1208,46 @@ b { font-weight: 600; }
   letter-spacing: .11em; text-transform: uppercase; color: var(--ink-mute);
 }
 
+/* ---------- глоссарий ---------- */
+.glosses { display: grid; gap: 34px; }
+.gloss h3 { margin: 0 0 5px; font-size: 1.3rem; font-weight: 600; }
+.count--plain {
+  font-family: var(--f-mono); font-size: .68rem; font-weight: 600; color: var(--ink-mute);
+  background: none; padding: 0; margin-left: 6px; vertical-align: middle;
+}
+.gloss__intro { margin: 0 0 16px; color: var(--ink-soft); font-size: .92rem; }
+.gloss__list {
+  margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px;
+}
+.gloss__item {
+  background: var(--raise); border: 1px solid var(--line); border-radius: 13px;
+  padding: 17px 19px; border-left: 3px solid var(--accent);
+  transition: border-color .16s ease, transform .16s ease;
+}
+.gloss__item:hover { transform: translateY(-3px); border-left-color: var(--sky); }
+.gloss__item dt { font-family: var(--f-head); font-size: 1rem; font-weight: 600; }
+.gloss__full {
+  display: block; font-family: var(--f-mono); font-size: .68rem; font-weight: 400;
+  color: var(--ink-mute); letter-spacing: .02em; margin-top: 3px;
+}
+.gloss__item dd { margin: 9px 0 0; font-size: .9rem; color: var(--ink-soft); }
+
+/* ---------- наверх ---------- */
+.totop {
+  position: fixed; right: 22px; bottom: 22px; z-index: 8;
+  width: 46px; height: 46px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: #FFF;
+  display: grid; place-items: center; padding: 0;
+  opacity: 0; visibility: hidden; transform: translateY(10px);
+  transition: opacity .25s ease, transform .25s ease, visibility .25s;
+  box-shadow: 0 10px 26px -12px var(--accent);
+}
+.totop svg { width: 21px; height: 21px; }
+.totop.shown { opacity: 1; visibility: visible; transform: none; }
+.totop:hover { transform: translateY(-3px); }
+@media (prefers-color-scheme: dark) { .totop { color: #05201D; } }
+@media (max-width: 560px) { .totop { right: 14px; bottom: 14px; width: 42px; height: 42px; } }
+
 /* ---------- запуск ---------- */
 pre {
   background: var(--deep); color: #D9E9E6; border-radius: 13px;
@@ -993,12 +1258,42 @@ pre code { font-family: var(--f-mono); }
 .sec p code { font-family: var(--f-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: 2px 6px; border-radius: 5px; }
 
 /* ---------- подвал ---------- */
-.foot { background: var(--deep); color: #A7BEBA; padding: 48px 0; font-size: .88rem; }
-.foot a { color: #6FE0D2; }
-.foot p { margin: 0 0 8px; max-width: 72ch; }
-.foot__big { display: flex; align-items: center; gap: 10px; font-size: 1.02rem; font-weight: 600; }
-.foot__big .ico { width: 21px; height: 21px; color: #6FE0D2; }
-.foot__note { margin-top: 14px; color: #7E938F; font-size: .82rem; }
+.foot { background: var(--deep); color: #A7BEBA; padding: 54px 0 34px; font-size: .88rem; }
+.foot a { color: #6FE0D2; text-decoration: none; }
+.foot a:hover { text-decoration: underline; }
+.foot p { margin: 0 0 10px; max-width: 46ch; }
+
+.foot__grid {
+  display: grid; grid-template-columns: 1.5fr 1fr 1.2fr 1fr; gap: 34px;
+  padding-bottom: 30px; border-bottom: 1px solid #1C3B37; margin-bottom: 22px;
+}
+@media (max-width: 900px) { .foot__grid { grid-template-columns: 1fr 1fr; gap: 28px; } }
+@media (max-width: 560px) { .foot__grid { grid-template-columns: 1fr; } }
+
+.foot__big {
+  display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  font-family: var(--f-head); font-size: 1.1rem; font-weight: 600; color: #EAF4F2;
+}
+.foot__big .ico { width: 22px; height: 22px; color: #4FD1C3; }
+.foot__link { display: flex; align-items: center; gap: 9px; margin-top: 14px; }
+.foot__link .ico { width: 18px; height: 18px; color: #6FE0D2; }
+
+.foot__col h3 {
+  margin: 0 0 12px; font-family: var(--f-mono); font-size: .66rem; font-weight: 600;
+  letter-spacing: .13em; text-transform: uppercase; color: #7E938F;
+}
+.foot__col ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 7px; }
+.foot__col li { font-size: .87rem; }
+
+.foot__numgrid { display: grid; gap: 9px; }
+.foot__numgrid div { display: flex; align-items: baseline; gap: 9px; }
+.foot__numgrid b {
+  font-family: var(--f-head); font-size: 1.12rem; font-weight: 700; color: #EAF4F2;
+  min-width: 2.4ch; font-variant-numeric: tabular-nums;
+}
+.foot__numgrid span { font-size: .82rem; color: #A7BEBA; }
+
+.foot__note { color: #8A9F9B; font-size: .82rem; max-width: 78ch; margin: 0; }
 
 @media (max-width: 560px) {
   body { font-size: 16px; }

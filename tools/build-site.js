@@ -12,6 +12,9 @@
  * Поэтому страница не может разойтись с кодом: поменяли правило —
  * пересобрали страницу, и она уже другая.
  *
+ * Картинок нет ни одной: вся графика — разметка SVG, она ничего не весит,
+ * не требует отдельной загрузки и одинаково резкая на любом экране.
+ *
  *   npm run site
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
@@ -20,6 +23,7 @@ import { fileURLToPath } from 'node:url'
 
 import { TOOLS } from '../src/server.js'
 import { allRules, rulesByArea, SEVERITY_LABELS } from '../src/rules/index.js'
+import { icon, TOOL_ICONS, SECTION_ICONS, SECTION_TONES } from './icons.js'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const REPO = 'https://github.com/qa-novchenkova/seo-revizor'
@@ -40,8 +44,12 @@ const areas = rulesByArea()
 const steps = readSteps()
 
 const checks = checklist.sections.flatMap((section) => section.checks)
-const automated = checks.filter((check) => check.kind === 'auto' || check.kind === 'both').length
+const automated = checks.filter(isMachine).length
 const manual = checks.length - automated
+
+function isMachine(check) {
+  return check.kind === 'auto' || check.kind === 'both'
+}
 
 /** Достаёт нумерованный список из раздела «Порядок работы» в AGENT.md. */
 function readSteps() {
@@ -64,7 +72,7 @@ writeFileSync(path.join(root, 'docs/index.html'), html, 'utf8')
 console.log(`  docs/index.html собран, ${Math.round(html.length / 1024)} КБ`)
 console.log(`  инструментов ${TOOLS.length}, правил ${rules.length}, проверок ${checks.length}`)
 
-// ── разметка ─────────────────────────────────────────────────────────────────
+// ── страница ─────────────────────────────────────────────────────────────────
 
 function page() {
   return `<!doctype html>
@@ -78,11 +86,18 @@ function page() {
 <meta property="og:description" content="MCP-сервер и агент: ${TOOLS.length} инструментов, ${rules.length} правил, отчёт со сравнением прогонов.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Literata:opsz,wght@7..72,400;7..72,600;7..72,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>${style()}</style>
+<script>
+// Пометка «скрипты работают». Всё, что прячется до появления при прокрутке,
+// прячется только при этой пометке: без скриптов страница просто видна целиком,
+// а не остаётся пустой.
+document.documentElement.className = 'js'
+</script>
 </head>
 <body>
 ${hero()}
+${ticker()}
 ${nav()}
 <main>
 ${about()}
@@ -99,36 +114,108 @@ ${footer()}
 `
 }
 
+// ── шапка ────────────────────────────────────────────────────────────────────
+
 function hero() {
   return `<header class="hero">
-  <div class="wrap">
-    <p class="kicker">MCP-сервер · агент · открытый код</p>
-    <h1>Ревизор</h1>
-    <p class="lede">Проверяет сайт по чек-листу и собирает отчёт, в котором по каждой находке
-    сказано три вещи: что не так, почему это плохо и что конкретно сделать.</p>
-    <dl class="facts">
-      ${fact(TOOLS.length, 'инструментов')}
-      ${fact(rules.length, 'правил в коде')}
-      ${fact(checks.length, 'пунктов чек-листа')}
-      ${fact(automated, 'из них автоматизировано')}
-    </dl>
-    <p class="cta">
-      <a class="btn btn--main" href="${REPO}">Открыть на GitHub</a>
-      <span class="btn btn--soon" aria-disabled="true">Телеграм-бот · скоро</span>
-    </p>
+  <div class="hero__glow hero__glow--a"></div>
+  <div class="hero__glow hero__glow--b"></div>
+  <div class="hero__glow hero__glow--c"></div>
+
+  <div class="wrap hero__in">
+    <div class="hero__text">
+      <p class="kicker">${icon('spark')} MCP-сервер · агент · открытый код</p>
+      <h1>Сайт<br><em>под лупой</em></h1>
+      <p class="lede">${checks.length} проверок вместо списка в блокноте. Агент сам решает,
+      что смотреть дальше, и собирает отчёт, где по каждой находке сказано три вещи:
+      <b>что не так</b>, <b>почему это плохо</b> и <b>что конкретно сделать</b>.</p>
+
+      <p class="cta">
+        <a class="btn btn--main" href="${REPO}">${icon('github')} Открыть код</a>
+        <a class="btn btn--ghost" href="#checklist">${icon('rules')} Смотреть чек-лист</a>
+      </p>
+    </div>
+
+    ${scanner()}
   </div>
+
+  <dl class="facts wrap">
+    ${fact(TOOLS.length, 'инструментов', 'code')}
+    ${fact(rules.length, 'правил в коде', 'rules')}
+    ${fact(checks.length, 'пунктов чек-листа', 'check')}
+    ${fact(automated, 'делает программа', 'bot')}
+  </dl>
 </header>`
 }
 
-function fact(value, label) {
-  return `<div><dd>${value}</dd><dt>${esc(label)}</dt></div>`
+function fact(value, label, name) {
+  return `<div class="fact">
+    ${icon(name, 'fact__ico')}
+    <dd><span class="num" data-count="${value}">${value}</span></dd>
+    <dt>${esc(label)}</dt>
+  </div>`
+}
+
+/** Картинка в шапке: страница, по которой сверху вниз идёт проверка. */
+function scanner() {
+  const lines = [
+    [30, 150], [30, 110], [30, 172], [30, 92],
+    [30, 160], [30, 128], [30, 178], [30, 104],
+  ]
+
+  const rows = lines
+    .map(
+      ([x, width], i) =>
+        `<rect class="scan__line" x="${x}" y="${74 + i * 22}" width="${width}" height="8" rx="4"
+         style="animation-delay:${(i * 0.42).toFixed(2)}s"/>`,
+    )
+    .join('')
+
+  const marks = [0, 2, 4, 6]
+    .map(
+      (i) =>
+        `<g class="scan__ok" style="animation-delay:${(i * 0.42 + 0.55).toFixed(2)}s">
+        <circle cx="228" cy="${78 + i * 22}" r="8"/>
+        <path d="m224.4 78.2 2.6 2.6 4.6-5"/>
+      </g>`,
+    )
+    .join('')
+
+  return `<div class="scan" aria-hidden="true">
+  <svg viewBox="0 0 260 280" fill="none">
+    <rect class="scan__frame" x="8" y="8" width="244" height="264" rx="16"/>
+    <path class="scan__bar" d="M8 44h244"/>
+    <circle class="scan__dot scan__dot--r" cx="28" cy="26" r="4.6"/>
+    <circle class="scan__dot scan__dot--y" cx="44" cy="26" r="4.6"/>
+    <circle class="scan__dot scan__dot--g" cx="60" cy="26" r="4.6"/>
+    <rect class="scan__url" x="78" y="20" width="150" height="12" rx="6"/>
+    ${rows}
+    ${marks}
+    <g class="scan__beam">
+      <rect x="8" y="0" width="244" height="3" rx="1.5"/>
+      <rect class="scan__haze" x="8" y="-26" width="244" height="26"/>
+    </g>
+  </svg>
+</div>`
+}
+
+/** Бегущая строка: показывает разброс проверок одним взглядом. */
+function ticker() {
+  const picked = checklist.sections.flatMap((section) => section.checks.slice(0, 3).map((check) => check.title))
+
+  const row = picked
+    .map((title) => `<span class="tick">${icon('check', 'tick__ico')}${esc(title)}</span>`)
+    .join('')
+
+  // Лента дублируется, чтобы шов при зацикливании был не виден.
+  return `<div class="ticker" aria-hidden="true"><div class="ticker__row">${row}${row}</div></div>`
 }
 
 function nav() {
   const items = [
     ['#about', 'Что это'],
     ['#tools', 'Инструменты'],
-    ['#order', 'Порядок проверки'],
+    ['#order', 'Как думает агент'],
     ['#checklist', 'Чек-листы'],
     ['#rules', 'Правила'],
     ['#start', 'Запуск'],
@@ -139,32 +226,50 @@ function nav() {
   </div></nav>`
 }
 
+// ── что это ──────────────────────────────────────────────────────────────────
+
 function about() {
-  return `<section class="sec" id="about"><div class="wrap narrow">
-  <h2>Что это</h2>
-  <p>Обычный SEO-аудит делают руками по списку: открыть robots.txt, посмотреть заголовки,
-  проверить зеркала, прокликать ссылки. Работа механическая, но пропустить пункт легко,
-  а цена пропуска высокая — одна строка в robots.txt закрывает сайт от поиска целиком.</p>
+  const cards = [
+    ['code', 'Сервер', 'Набор функций. Каждая проверяет свой участок и возвращает данные: коды ответа, заголовки, ссылки, скорость.'],
+    ['bot', 'Агент', 'Цикл. Сам выбирает, какую функцию вызвать следующей, исходя из того, что нашлось на предыдущем шаге.'],
+    ['content', 'Отчёт', 'Markdown, HTML и PDF. Со сравнением с прошлой проверкой: что исправлено, что появилось, что осталось.'],
+  ]
 
-  <p>Ревизор состоит из двух частей. <strong>Сервер</strong> — набор функций, каждая проверяет
-  свой участок и возвращает данные. <strong>Агент</strong> — цикл, который сам решает,
-  какую функцию вызвать следующей, исходя из того, что нашлось на предыдущем шаге.
-  Карта сайта нашлась — берём из неё страницы; не нашлась — идём по ссылкам с главной.
-  Сколько будет вызовов, заранее не знает никто.</p>
+  return `<section class="sec" id="about"><div class="wrap">
+  <h2 class="rise">Что это</h2>
+  <p class="intro rise">Обычный SEO-аудит делают руками по списку: открыть robots.txt, посмотреть
+  заголовки, проверить зеркала, прокликать ссылки. Работа механическая, но пропустить пункт
+  легко, а цена пропуска высокая — одна строка в robots.txt закрывает сайт от поиска целиком.</p>
 
-  <p class="note">Сервер работает на вашей машине и никуда ничего не отправляет.
-  Проверять чужие сайты без разрешения владельца не стоит: обход создаёт нагрузку.</p>
+  <div class="cards">
+    ${cards
+      .map(
+        ([name, title, text], i) => `<article class="card rise" style="--wait:${i * 90}ms">
+      <span class="card__ico">${icon(name)}</span>
+      <h3>${esc(title)}</h3>
+      <p>${esc(text)}</p>
+    </article>`,
+      )
+      .join('')}
+  </div>
+
+  <p class="note rise">${icon('eye', 'note__ico')} Сервер работает на вашей машине и никуда ничего
+  не отправляет. Проверять чужие сайты без разрешения владельца не стоит: обход создаёт нагрузку.</p>
   </div></section>`
 }
 
+// ── инструменты ──────────────────────────────────────────────────────────────
+
 function toolsSection() {
   return `<section class="sec sec--alt" id="tools"><div class="wrap">
-  <h2>Инструменты</h2>
-  <p class="intro">Ровно то, что сервер отвечает на вопрос «какие у тебя есть инструменты».
+  <h2 class="rise">Инструменты <span class="badge">${TOOLS.length}</span></h2>
+  <p class="intro rise">Ровно то, что сервер отвечает на вопрос «какие у тебя есть инструменты».
   Описания читает модель — по ним она понимает, когда какой вызывать.</p>
+
   <div class="tools">
     ${TOOLS.map(
-      (tool) => `<article class="tool">
+      (tool, i) => `<article class="tool rise" style="--wait:${(i % 3) * 80}ms">
+      <span class="tool__ico">${icon(TOOL_ICONS[tool.name] || 'code')}</span>
       <h3>${esc(tool.title)}</h3>
       <code>${esc(tool.name)}</code>
       <p>${esc(tool.description)}</p>
@@ -174,17 +279,78 @@ function toolsSection() {
   </div></section>`
 }
 
+// ── порядок работы ───────────────────────────────────────────────────────────
+
 function orderSection() {
-  return `<section class="sec" id="order"><div class="wrap narrow">
-  <h2>Порядок проверки</h2>
-  <p class="intro">Последовательность не случайная: каждый шаг опирается на предыдущий.
-  Зеркала идут первыми, потому что пока поисковик видит вместо одного сайта три копии,
-  остальные правки почти бессмысленны.</p>
+  return `<section class="sec" id="order"><div class="wrap">
+  <h2 class="rise">Как думает агент</h2>
+  <p class="intro rise">Разница между обычным запросом и агентом в том, что агент сам решает,
+  что делать дальше, и повторяет это, пока не закончит. Сколько будет вызовов —
+  заранее не знает никто: зависит от того, что найдётся по дороге.</p>
+
+  ${loop()}
+
+  <h3 class="sub rise">Порядок проверки</h3>
+  <p class="intro rise">Последовательность не случайная. Зеркала идут первыми: пока поисковик
+  видит вместо одного сайта три копии, остальные правки почти бессмысленны.</p>
+
   <ol class="order">
-    ${steps.map((step) => `<li>${inline(step)}</li>`).join('')}
+    ${steps.map((step, i) => `<li class="rise" style="--wait:${Math.min(i, 6) * 50}ms">${inline(step)}</li>`).join('')}
   </ol>
   </div></section>`
 }
+
+/** Схема цикла: точка бежит по кругу и возвращается на второй шаг. */
+function loop() {
+  const nodes = [
+    [70, 'Задача', 'проверь сайт'],
+    [250, 'Выбор', 'какой инструмент'],
+    [430, 'Данные', 'ответ инструмента'],
+    [610, 'Оценка', 'хватит или нет'],
+  ]
+
+  const boxes = nodes
+    .map(
+      ([x, title, note], i) => `<g class="loop__node" style="--wait:${i * 160}ms">
+      <rect x="${x}" y="54" width="140" height="62" rx="12"/>
+      <text x="${x + 70}" y="80" class="loop__t">${esc(title)}</text>
+      <text x="${x + 70}" y="99" class="loop__s">${esc(note)}</text>
+    </g>`,
+    )
+    .join('')
+
+  return `<div class="loop rise">
+  <svg viewBox="0 0 780 210" fill="none" role="img"
+       aria-label="Схема работы агента: задача, выбор инструмента, данные, оценка — и либо новый круг, либо отчёт">
+    <defs>
+      <marker id="tip" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+        <path d="M0 0 10 5 0 10z" fill="currentColor"/>
+      </marker>
+      <path id="ring" d="M680 122 V166 H320 V126"/>
+    </defs>
+
+    ${boxes}
+
+    <g class="loop__wire">
+      <path d="M214 85h30" marker-end="url(#tip)"/>
+      <path d="M394 85h30" marker-end="url(#tip)"/>
+      <path d="M574 85h30" marker-end="url(#tip)"/>
+      <path d="M680 122 V166 H320 V126" marker-end="url(#tip)"/>
+      <path d="M740 122 V190 H430" marker-end="url(#tip)" class="loop__wire--out"/>
+    </g>
+
+    <circle class="loop__spark" r="5.5">
+      <animateMotion dur="3.2s" repeatCount="indefinite"
+        path="M140 116 V166 H320 V126"/>
+    </circle>
+
+    <text x="500" y="160" class="loop__note">не хватило — идём на следующий круг</text>
+    <text x="436" y="194" class="loop__note loop__note--out" text-anchor="start">хватило — собираем отчёт</text>
+  </svg>
+</div>`
+}
+
+// ── чек-листы ────────────────────────────────────────────────────────────────
 
 function checklistSection() {
   const legend = Object.entries(KINDS)
@@ -192,18 +358,19 @@ function checklistSection() {
     .join('')
 
   return `<section class="sec sec--alt" id="checklist"><div class="wrap">
-  <h2>Чек-листы</h2>
-  <p class="intro">Полный список из ${checks.length} проверок в ${plural(checklist.sections.length, ['разделе', 'разделах', 'разделах'])}.
-  У каждой сказано, почему это важно и как проверяется. Автоматизировать удалось ${automated};
-  оставшиеся ${manual} требуют человека или платных сервисов — и это не недоделка,
-  а честная граница: оценить, понятен ли заголовок категории живому человеку, программа не может.</p>
+  <h2 class="rise">Чек-листы <span class="badge">${checks.length}</span></h2>
+  <p class="intro rise">Полный список в ${plural(checklist.sections.length, ['разделе', 'разделах', 'разделах'])}.
+  У каждой проверки сказано, почему это важно и как проверяется. Автоматизировать удалось
+  <b>${automated}</b>; оставшиеся <b>${manual}</b> требуют человека или платных сервисов — и это
+  не недоделка, а честная граница: понятен ли заголовок категории живому человеку,
+  программа оценить не может.</p>
 
-  <ul class="legend">${legend}</ul>
+  <ul class="legend rise">${legend}</ul>
 
-  <div class="filters" role="group" aria-label="Отбор проверок">
-    <button type="button" data-filter="all" class="on">Все ${checks.length}</button>
-    <button type="button" data-filter="machine">Делает программа ${automated}</button>
-    <button type="button" data-filter="human">Нужен человек ${manual}</button>
+  <div class="filters rise" role="group" aria-label="Отбор проверок">
+    <button type="button" data-filter="all" class="on">Все <b>${checks.length}</b></button>
+    <button type="button" data-filter="machine">${icon('bot')} Делает программа <b>${automated}</b></button>
+    <button type="button" data-filter="human">${icon('eye')} Нужен человек <b>${manual}</b></button>
   </div>
 
   <div class="lists" data-mode="all">
@@ -213,11 +380,27 @@ function checklistSection() {
 }
 
 function checklistBlock(section) {
-  const machine = section.checks.filter((check) => check.kind === 'auto' || check.kind === 'both').length
+  const machine = section.checks.filter(isMachine).length
+  const share = Math.round((machine / section.checks.length) * 100)
+  const [light, dark] = SECTION_TONES[section.id] || ['#1A6F69', '#4FB8AF']
 
-  return `<section class="block" data-machine="${machine}" data-human="${section.checks.length - machine}">
-  <h3>${esc(section.title)} <span class="count">${section.checks.length}</span></h3>
-  <p class="block__intro">${esc(section.intro)}</p>
+  return `<section class="block rise" data-machine="${machine}" data-human="${section.checks.length - machine}"
+  style="--tone:${light}; --tone-dark:${dark}">
+  <header class="block__head">
+    <span class="block__ico">${icon(SECTION_ICONS[section.id] || 'check')}</span>
+    <div class="block__title">
+      <h3>${esc(section.title)} <span class="count">${section.checks.length}</span></h3>
+      <p class="block__intro">${esc(section.intro)}</p>
+    </div>
+  </header>
+
+  <div class="barline">
+    <span class="bar" role="img" aria-label="Программа делает ${share} процентов проверок этого раздела">
+      <i class="bar__fill" style="--share:${share}%"></i>
+    </span>
+    <span class="bar__text"><b>${share}%</b> делает программа</span>
+  </div>
+
   <ol class="checks">
     ${section.checks.map(checkItem).join('')}
   </ol>
@@ -225,9 +408,7 @@ function checklistBlock(section) {
 }
 
 function checkItem(check) {
-  const side = check.kind === 'auto' || check.kind === 'both' ? 'machine' : 'human'
-
-  return `<li class="chk" data-side="${side}">
+  return `<li class="chk" data-side="${isMachine(check) ? 'machine' : 'human'}">
     <div class="chk__head">
       <h4>${esc(check.title)}</h4>
       <span class="tag tag--${check.kind}">${esc(KINDS[check.kind].label)}</span>
@@ -237,16 +418,29 @@ function checkItem(check) {
   </li>`
 }
 
+// ── правила ──────────────────────────────────────────────────────────────────
+
 function rulesSection() {
   const counts = {}
   for (const rule of rules) counts[rule.severity] = (counts[rule.severity] || 0) + 1
 
+  const top = Math.max(...areas.map((group) => group.total))
   const rows = areas
     .map(
-      (group) => `<tr>
-      <td>${esc(group.area)}</td>
-      <td class="num">${group.total}</td>
-    </tr>`,
+      (group) => `<li>
+      <span class="rule__name">${esc(group.area)}</span>
+      <span class="rule__bar"><i style="--w:${Math.round((group.total / top) * 100)}%"></i></span>
+      <span class="rule__num">${group.total}</span>
+    </li>`,
+    )
+    .join('')
+
+  const severities = Object.entries(counts)
+    .map(
+      ([level, count]) => `<div class="sevcard sevcard--${level}">
+      <span class="sevcard__num">${count}</span>
+      <span class="sevcard__label">${esc(SEVERITY_LABELS[level])}</span>
+    </div>`,
     )
     .join('')
 
@@ -261,34 +455,22 @@ function rulesSection() {
     .join('')
 
   return `<section class="sec" id="rules"><div class="wrap">
-  <h2>Правила</h2>
-  <p class="intro">Формулировки замечаний вынесены из кода в файлы данных: ${rules.length} правил,
-  у каждого свой постоянный идентификатор. Это даёт две вещи. Текст можно править,
-  не трогая логику проверок. И два прогона можно сравнить между собой —
-  видно, что исправлено, а что появилось.</p>
+  <h2 class="rise">Правила <span class="badge">${rules.length}</span></h2>
+  <p class="intro rise">Формулировки замечаний вынесены из кода в файлы данных, у каждого правила
+  свой постоянный идентификатор. Это даёт две вещи. Текст можно править, не трогая логику проверок.
+  И два прогона можно сравнить между собой — видно, что исправлено, а что появилось.</p>
 
-  <div class="cols">
-    <table class="table">
-      <caption>По областям</caption>
-      <tbody>${rows}</tbody>
-    </table>
-    <table class="table">
-      <caption>По важности</caption>
-      <tbody>
-        ${Object.entries(counts)
-          .map(([level, count]) => `<tr><td>${esc(SEVERITY_LABELS[level])}</td><td class="num">${count}</td></tr>`)
-          .join('')}
-      </tbody>
-    </table>
-  </div>
+  <div class="sevs rise">${severities}</div>
 
-  <h3 class="sub">Как выглядит находка</h3>
+  <ul class="rulebars rise">${rows}</ul>
+
+  <h3 class="sub rise">Как выглядит находка</h3>
   <div class="findings">${examples}</div>
   </div></section>`
 }
 
 function exampleFinding(rule) {
-  return `<article class="finding finding--${rule.severity}">
+  return `<article class="finding finding--${rule.severity} rise">
     <div class="finding__head">
       <span class="sev">${esc(SEVERITY_LABELS[rule.severity])}</span>
       <h4>${esc(rule.title)}</h4>
@@ -299,37 +481,45 @@ function exampleFinding(rule) {
   </article>`
 }
 
+// ── запуск ───────────────────────────────────────────────────────────────────
+
 function startSection() {
   return `<section class="sec sec--alt" id="start"><div class="wrap narrow">
-  <h2>Запуск</h2>
-  <p class="intro">Нужен Node.js 22 или новее. Ключи не обязательны:
+  <h2 class="rise">Запуск</h2>
+  <p class="intro rise">Нужен Node.js 22 или новее. Ключи не обязательны:
   без них пропускается только измерение скорости.</p>
 
-  <pre><code>git clone ${REPO}.git
+  <pre class="rise"><code>git clone ${REPO}.git
 cd seo-revizor
 npm install
 npm run check meta https://example.com/</code></pre>
 
-  <p>Файл <code>.mcp.json</code> уже в репозитории — откройте папку в Claude Code
+  <p class="rise">Файл <code>.mcp.json</code> уже в репозитории — откройте папку в Claude Code
   или другом клиенте с поддержкой MCP, и инструменты появятся в списке.
   Дальше можно просто попросить: «следуй AGENT.md и проверь сайт такой-то».</p>
 
-  <p>Полное описание, устройство и разбор каждого файла — в
+  <p class="rise">Полное описание, устройство и разбор каждого файла — в
   <a href="${REPO}#readme">README репозитория</a>.</p>
   </div></section>`
 }
 
 function footer() {
   return `<footer class="foot"><div class="wrap">
-  <p>Ревизор — открытый код под лицензией MIT.
-  <a href="${REPO}">github.com/qa-novchenkova/seo-revizor</a></p>
-  <p class="foot__note">Страница собрана из файлов проекта: инструменты из сервера,
-  правила из чек-листа, порядок из инструкции агенту. Поэтому она не расходится с кодом.</p>
+  <p class="foot__big">${icon('github')} <a href="${REPO}">github.com/qa-novchenkova/seo-revizor</a></p>
+  <p>Открытый код под лицензией MIT.</p>
+  <p class="foot__note">Страница собрана из файлов проекта: инструменты из сервера, правила
+  из чек-листа, порядок из инструкции агенту. Пересобирается сама при каждом изменении кода,
+  поэтому разойтись с ним не может.</p>
   </div></footer>`
 }
 
+// ── поведение ────────────────────────────────────────────────────────────────
+
 function script() {
   return `
+var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+// Отбор проверок
 document.querySelectorAll('.filters button').forEach(function (button) {
   button.addEventListener('click', function () {
     document.querySelectorAll('.filters button').forEach(function (other) {
@@ -337,7 +527,47 @@ document.querySelectorAll('.filters button').forEach(function (button) {
     });
     document.querySelector('.lists').dataset.mode = button.dataset.filter;
   });
-});`
+});
+
+// Появление блоков при прокрутке
+var risers = document.querySelectorAll('.rise');
+if (calm || !('IntersectionObserver' in window)) {
+  risers.forEach(function (node) { node.classList.add('in'); });
+} else {
+  var watcher = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('in');
+      watcher.unobserve(entry.target);
+    });
+  }, { rootMargin: '0px 0px -60px 0px' });
+  risers.forEach(function (node) { watcher.observe(node); });
+}
+
+// Счётчики в шапке. В разметке уже стоит настоящее число — если скрипт
+// не отработает, посетитель увидит его, а не ноль.
+document.querySelectorAll('.num').forEach(function (node) {
+  var target = Number(node.dataset.count);
+  if (calm) return;
+
+  node.textContent = '0';
+  var started = null;
+  var span = 1100;
+  function tick(now) {
+    if (started === null) started = now;
+    var part = Math.min((now - started) / span, 1);
+    node.textContent = Math.round(target * (1 - Math.pow(1 - part, 3)));
+    if (part < 1) requestAnimationFrame(tick);
+  }
+  requestAnimationFrame(tick);
+});
+
+// Тем, кто просил не двигать картинки, останавливаем и рисованную анимацию
+if (calm) {
+  document.querySelectorAll('svg').forEach(function (svg) {
+    if (svg.pauseAnimations) svg.pauseAnimations();
+  });
+}`
 }
 
 // ── стили ────────────────────────────────────────────────────────────────────
@@ -345,163 +575,340 @@ document.querySelectorAll('.filters button').forEach(function (button) {
 function style() {
   return `
 :root {
-  --paper: #F2F5F4; --surface: #FFFFFF; --raise: #FAFBFB; --deep: #10201E;
-  --ink: #121917; --ink-soft: #46524F; --ink-mute: #5B6864;
-  --line: #DCE4E1; --line-hard: #C2CECA;
-  --accent: #1A6F69; --accent-ink: #0E4A46; --accent-soft: #E1EFEC;
-  --crit: #A82A2E; --warn: #8A6106; --ok: #2C6E4C; --info: #2C5AA8;
-  --f-head: 'Literata', Georgia, 'Times New Roman', serif;
+  --paper: #F4F6F5; --surface: #FFFFFF; --raise: #FBFCFC; --deep: #0A1614;
+  --ink: #101715; --ink-soft: #414D4A; --ink-mute: #58645F;
+  --line: #DCE4E1; --line-hard: #BDCAC6;
+  --accent: #0F7A72; --accent-ink: #0B564F; --accent-soft: #DFF0ED;
+  --hot: #D4443C; --sun: #E08A00; --sky: #1D63D2; --grape: #6D28D9;
+  --crit: #B01F24; --warn: #8A6106; --ok: #1E7346;
+  --f-head: 'Unbounded', 'Trebuchet MS', sans-serif;
   --f-body: 'IBM Plex Sans', 'Segoe UI', system-ui, sans-serif;
   --f-mono: 'IBM Plex Mono', 'Cascadia Mono', Consolas, monospace;
+  --rise: 22px;
 }
 @media (prefers-color-scheme: dark) {
   :root {
-    --paper: #0E1413; --surface: #151D1B; --raise: #1B2523; --deep: #060B0A;
-    --ink: #E7EEEC; --ink-soft: #AEBAB7; --ink-mute: #909D99;
-    --line: #232E2C; --line-hard: #35433F;
-    --accent: #4FB8AF; --accent-ink: #8FD9D2; --accent-soft: #143330;
-    --crit: #F0797C; --warn: #DEA94F; --ok: #6CC38F; --info: #7EA4EC;
+    --paper: #0B1211; --surface: #121A19; --raise: #172221; --deep: #050B0A;
+    --ink: #E9F0EE; --ink-soft: #AFBCB8; --ink-mute: #919E9A;
+    --line: #22302D; --line: #22302D; --line-hard: #35443F;
+    --accent: #4FD1C3; --accent-ink: #8FE5DA; --accent-soft: #10312D;
+    --hot: #FF8A80; --sun: #F5B740; --sky: #7FB0FF; --grape: #BFA0FF;
+    --crit: #FF9B9B; --warn: #F0C25A; --ok: #74D8A0;
   }
 }
+
 * { box-sizing: border-box; }
 html { scroll-behavior: smooth; }
 body {
   margin: 0; background: var(--paper); color: var(--ink);
   font-family: var(--f-body); font-size: 16.5px; line-height: 1.66;
-  -webkit-font-smoothing: antialiased;
+  -webkit-font-smoothing: antialiased; overflow-x: hidden;
 }
 a { color: var(--accent-ink); }
-:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 3px; border-radius: 3px; }
+:focus-visible { outline: 2.5px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
 h1, h2, h3, h4 { font-family: var(--f-head); letter-spacing: -.02em; text-wrap: balance; }
+b { font-weight: 600; }
 
-.wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
 .wrap.narrow { max-width: 760px; }
 
+.ico { width: 1.25em; height: 1.25em; flex: none; }
+
+/* Появление при прокрутке. Прячем только когда скрипты работают —
+   иначе без них страница осталась бы пустой. */
+.js .rise { opacity: 0; transform: translateY(var(--rise)); transition: opacity .6s ease, transform .6s cubic-bezier(.2,.7,.3,1); transition-delay: var(--wait, 0ms); }
+.js .rise.in { opacity: 1; transform: none; }
+
 /* ---------- шапка ---------- */
-.hero { background: var(--deep); color: #EAF2F0; padding: 76px 0 62px; }
+.hero {
+  position: relative; overflow: hidden;
+  background: var(--deep); color: #EAF4F2;
+  padding: 74px 0 0;
+}
+.hero__glow {
+  position: absolute; border-radius: 50%; filter: blur(70px);
+  opacity: .55; pointer-events: none;
+}
+.hero__glow--a { width: 460px; height: 460px; background: #0F7A72; top: -170px; left: -120px; animation: drift 17s ease-in-out infinite; }
+.hero__glow--b { width: 380px; height: 380px; background: #6D28D9; top: 40px; right: -130px; opacity: .4; animation: drift 21s ease-in-out infinite reverse; }
+.hero__glow--c { width: 320px; height: 320px; background: #D4443C; bottom: -160px; left: 42%; opacity: .3; animation: drift 25s ease-in-out infinite; }
+@keyframes drift {
+  0%, 100% { transform: translate3d(0,0,0) scale(1); }
+  50% { transform: translate3d(26px, -22px, 0) scale(1.12); }
+}
+
+.hero__in { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 44px; align-items: center; }
+@media (max-width: 900px) { .hero__in { grid-template-columns: 1fr; } .scan { display: none; } }
+
 .kicker {
-  margin: 0 0 16px; font-family: var(--f-mono); font-size: .7rem; font-weight: 600;
-  letter-spacing: .14em; text-transform: uppercase; color: #7FCFC7;
+  display: inline-flex; align-items: center; gap: 8px; margin: 0 0 18px;
+  font-family: var(--f-mono); font-size: .7rem; font-weight: 600;
+  letter-spacing: .13em; text-transform: uppercase; color: #6FE0D2;
+  border: 1px solid #1D4A45; border-radius: 999px; padding: 6px 14px;
 }
-.hero h1 { margin: 0; font-size: clamp(2.9rem, 8vw, 5rem); line-height: .98; font-weight: 700; }
-.lede { margin: 20px 0 0; font-size: 1.16rem; max-width: 58ch; color: #C3D3D0; }
+.hero h1 {
+  margin: 0; font-size: clamp(2.9rem, 8.4vw, 5.4rem); line-height: .94;
+  font-weight: 800; letter-spacing: -.045em;
+}
+.hero h1 em {
+  font-style: normal;
+  background: linear-gradient(96deg, #4FD1C3, #7FB0FF 46%, #FF8A80);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.lede { margin: 22px 0 0; font-size: 1.14rem; max-width: 54ch; color: #C6D6D3; }
+.lede b { color: #EAF4F2; }
 
-.facts { display: flex; flex-wrap: wrap; gap: 12px; margin: 38px 0 0; padding: 0; }
-.facts div {
-  flex: 1 1 150px; border: 1px solid #24403C; border-radius: 10px;
-  padding: 14px 16px; background: #14262400;
-}
-.facts dd {
-  margin: 0; font-family: var(--f-head); font-weight: 700;
-  font-size: 1.9rem; line-height: 1; font-variant-numeric: tabular-nums; color: #EAF2F0;
-}
-.facts dt {
-  margin: 6px 0 0; font-family: var(--f-mono); font-size: .64rem; font-weight: 600;
-  letter-spacing: .1em; text-transform: uppercase; color: #8EA8A4;
-}
-
-.cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 34px 0 0; }
+.cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 32px 0 0; }
 .btn {
-  display: inline-block; padding: 12px 22px; border-radius: 9px;
-  font-weight: 600; font-size: .95rem; text-decoration: none;
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 13px 24px; border-radius: 11px; text-decoration: none;
+  font-weight: 600; font-size: .96rem;
+  transition: transform .18s ease, box-shadow .18s ease, background .18s ease;
 }
-.btn--main { background: #4FB8AF; color: #07211F; }
-.btn--main:hover { background: #6FCCC4; }
-.btn--soon { border: 1px solid #2C4A46; color: #8EA8A4; }
+.btn--main { background: #4FD1C3; color: #05201D; box-shadow: 0 8px 26px -12px #4FD1C3; }
+.btn--main:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -12px #4FD1C3; }
+.btn--ghost { border: 1px solid #27524C; color: #BFE4DF; }
+.btn--ghost:hover { background: #10302C; transform: translateY(-2px); }
+
+/* картинка со сканированием */
+.scan svg { width: 100%; height: auto; display: block; }
+.scan__frame { fill: #0D201E; stroke: #23423E; stroke-width: 1.6; }
+.scan__bar { stroke: #23423E; stroke-width: 1.6; }
+.scan__url { fill: #16332F; }
+.scan__dot--r { fill: #FF8A80; } .scan__dot--y { fill: #F5B740; } .scan__dot--g { fill: #4FD1C3; }
+.scan__line { fill: #1B3B37; animation: lineOn 3.6s ease-in-out infinite; }
+@keyframes lineOn { 0%, 12% { fill: #1B3B37; } 26%, 74% { fill: #2E605A; } 92%, 100% { fill: #1B3B37; } }
+.scan__ok { opacity: 0; animation: okOn 3.6s ease-in-out infinite; }
+.scan__ok circle { fill: none; stroke: #4FD1C3; stroke-width: 1.5; }
+.scan__ok path { fill: none; stroke: #4FD1C3; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+@keyframes okOn { 0%, 14% { opacity: 0; transform: scale(.7); } 30%, 78% { opacity: 1; transform: scale(1); } 94%, 100% { opacity: 0; } }
+.scan__ok { transform-origin: 228px 100px; }
+.scan__beam { animation: sweep 3.6s cubic-bezier(.5,0,.5,1) infinite; }
+.scan__beam rect:first-child { fill: #4FD1C3; }
+.scan__haze { fill: url(#none); fill: #4FD1C3; opacity: .12; }
+@keyframes sweep {
+  0% { transform: translateY(46px); opacity: 0; }
+  8% { opacity: 1; }
+  86% { opacity: 1; }
+  100% { transform: translateY(268px); opacity: 0; }
+}
+
+/* цифры */
+.facts {
+  position: relative; display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px; margin: 52px auto 0; padding-bottom: 46px;
+}
+.fact {
+  border: 1px solid #1C3B37; border-radius: 14px; padding: 16px 18px;
+  background: linear-gradient(160deg, #0F211F, #0A1614);
+}
+.fact__ico { color: #4FD1C3; width: 22px; height: 22px; }
+.fact dd {
+  margin: 8px 0 0; font-family: var(--f-head); font-weight: 800;
+  font-size: 2.1rem; line-height: 1; color: #EAF4F2; font-variant-numeric: tabular-nums;
+}
+.fact dt {
+  margin: 7px 0 0; font-family: var(--f-mono); font-size: .64rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: #8FA8A4;
+}
+
+/* ---------- бегущая строка ---------- */
+.ticker {
+  background: var(--accent-soft); border-block: 1px solid var(--line);
+  overflow: hidden; padding: 11px 0;
+}
+.ticker__row { display: flex; gap: 30px; width: max-content; animation: run 68s linear infinite; }
+.ticker:hover .ticker__row { animation-play-state: paused; }
+@keyframes run { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.tick {
+  display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  font-size: .84rem; color: var(--accent-ink); font-weight: 500;
+}
+.tick__ico { width: 15px; height: 15px; color: var(--accent); }
 
 /* ---------- меню ---------- */
-.nav {
-  position: sticky; top: 0; z-index: 5;
-  background: var(--surface); border-bottom: 1px solid var(--line);
-}
-.nav .wrap { display: flex; gap: 4px; overflow-x: auto; }
+.nav { position: sticky; top: 0; z-index: 6; background: var(--surface); border-bottom: 1px solid var(--line); }
+.nav .wrap { display: flex; gap: 2px; overflow-x: auto; }
 .nav a {
-  padding: 13px 14px; font-size: .88rem; text-decoration: none;
+  padding: 14px 15px; font-size: .88rem; text-decoration: none; font-weight: 500;
   color: var(--ink-soft); white-space: nowrap; border-bottom: 2px solid transparent;
+  transition: color .15s ease, border-color .15s ease;
 }
 .nav a:hover { color: var(--accent-ink); border-bottom-color: var(--accent); }
 
 /* ---------- разделы ---------- */
-.sec { padding: 62px 0; scroll-margin-top: 52px; }
+.sec { padding: 74px 0; scroll-margin-top: 54px; }
 .sec--alt { background: var(--surface); border-block: 1px solid var(--line); }
-.sec h2 { margin: 0 0 18px; font-size: clamp(1.7rem, 3.6vw, 2.3rem); font-weight: 700; }
-.sub { margin: 44px 0 16px; font-size: 1.3rem; font-weight: 700; }
-.intro { margin: 0 0 30px; color: var(--ink-soft); max-width: 64ch; }
-.sec p { max-width: 68ch; }
-.note {
-  border-left: 3px solid var(--accent); padding-left: 14px;
-  color: var(--ink-soft); font-size: .95rem;
+.sec h2 {
+  margin: 0 0 18px; font-size: clamp(1.85rem, 4vw, 2.6rem); font-weight: 800;
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
 }
+.badge {
+  font-family: var(--f-mono); font-size: .78rem; font-weight: 600;
+  background: var(--accent); color: #FFF; padding: 4px 11px; border-radius: 999px;
+  letter-spacing: .04em;
+}
+@media (prefers-color-scheme: dark) { .badge { color: #05201D; } }
+.sub { margin: 52px 0 16px; font-size: 1.36rem; font-weight: 600; }
+.intro { margin: 0 0 30px; color: var(--ink-soft); max-width: 66ch; }
+.sec p { max-width: 68ch; }
+
+.note {
+  display: flex; gap: 12px; align-items: flex-start;
+  background: var(--accent-soft); border-radius: 12px; padding: 16px 18px;
+  color: var(--accent-ink); font-size: .94rem; margin-top: 26px;
+}
+.note__ico { color: var(--accent); margin-top: 3px; }
+
+/* ---------- карточки ---------- */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 16px; }
+.card {
+  background: var(--raise); border: 1px solid var(--line); border-radius: 16px; padding: 24px;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
+}
+.card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 16px 34px -22px var(--accent); }
+.card__ico {
+  display: inline-flex; padding: 11px; border-radius: 12px;
+  background: var(--accent-soft); color: var(--accent-ink); margin-bottom: 14px;
+}
+.card__ico .ico { width: 24px; height: 24px; }
+.card h3 { margin: 0 0 8px; font-size: 1.18rem; font-weight: 600; }
+.card p { margin: 0; font-size: .93rem; color: var(--ink-soft); }
 
 /* ---------- инструменты ---------- */
-.tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(298px, 1fr)); gap: 14px; }
-.tool { background: var(--raise); border: 1px solid var(--line); border-radius: 12px; padding: 20px; }
-.tool h3 { margin: 0; font-size: 1.08rem; font-weight: 700; }
-.tool code {
-  display: inline-block; margin: 7px 0 10px; font-family: var(--f-mono);
-  font-size: .74rem; color: var(--accent-ink);
-  background: var(--accent-soft); padding: 2px 7px; border-radius: 5px;
+.tools { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.tool {
+  position: relative; overflow: hidden;
+  background: var(--raise); border: 1px solid var(--line); border-radius: 15px; padding: 22px;
+  transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease;
 }
-.tool p { margin: 0; font-size: .91rem; color: var(--ink-soft); }
+.tool::after {
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 3px;
+  background: linear-gradient(90deg, var(--accent), var(--sky));
+  transform: scaleX(0); transform-origin: left; transition: transform .3s ease;
+}
+.tool:hover { transform: translateY(-4px); border-color: var(--line-hard); box-shadow: 0 18px 36px -24px #0006; }
+.tool:hover::after { transform: scaleX(1); }
+.tool__ico {
+  display: inline-flex; padding: 10px; border-radius: 11px;
+  background: var(--accent-soft); color: var(--accent-ink); margin-bottom: 13px;
+}
+.tool__ico .ico { width: 22px; height: 22px; }
+.tool h3 { margin: 0; font-size: 1.06rem; font-weight: 600; }
+.tool code {
+  display: inline-block; margin: 8px 0 11px; font-family: var(--f-mono);
+  font-size: .73rem; color: var(--accent-ink); background: var(--accent-soft);
+  padding: 3px 8px; border-radius: 6px;
+}
+.tool p { margin: 0; font-size: .9rem; color: var(--ink-soft); }
+
+/* ---------- схема цикла ---------- */
+.loop {
+  background: var(--raise); border: 1px solid var(--line); border-radius: 16px;
+  padding: 20px 16px; overflow-x: auto; margin-bottom: 10px;
+}
+.loop svg { display: block; min-width: 700px; width: 100%; height: auto; color: var(--line-hard); }
+.loop__node rect { fill: var(--surface); stroke: var(--line-hard); stroke-width: 1.4; }
+.loop__t { font-family: var(--f-body); font-size: 15px; font-weight: 600; fill: var(--ink); text-anchor: middle; }
+.loop__s { font-family: var(--f-body); font-size: 11.5px; fill: var(--ink-mute); text-anchor: middle; }
+.loop__wire path { stroke: var(--accent); stroke-width: 1.7; color: var(--accent); }
+.loop__wire--out { stroke: var(--ink-mute); color: var(--ink-mute); }
+.loop__spark { fill: var(--accent); }
+.loop__note { font-family: var(--f-mono); font-size: 11px; fill: var(--ink-mute); text-anchor: middle; }
+.loop__note--out { text-anchor: start; }
 
 /* ---------- порядок ---------- */
 .order { margin: 0; padding: 0; list-style: none; counter-reset: s; }
 .order li {
-  counter-increment: s; position: relative; padding: 14px 0 14px 52px;
+  counter-increment: s; position: relative; padding: 15px 0 15px 56px;
   border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .95rem;
 }
 .order li:last-child { border-bottom: 1px solid var(--line); }
 .order li::before {
-  content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 15px;
-  font-family: var(--f-mono); font-size: .72rem; font-weight: 600; color: var(--accent-ink);
+  content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 14px;
+  width: 34px; height: 26px; display: grid; place-items: center;
+  font-family: var(--f-mono); font-size: .7rem; font-weight: 600;
+  color: var(--accent-ink); background: var(--accent-soft); border-radius: 7px;
 }
-.order code, .sec p code, pre code {
-  font-family: var(--f-mono); font-size: .86em;
-}
-.order code { color: var(--ink); background: var(--accent-soft); padding: 1px 5px; border-radius: 4px; }
+.order code { font-family: var(--f-mono); font-size: .86em; color: var(--ink); background: var(--accent-soft); padding: 1px 6px; border-radius: 5px; }
 
 /* ---------- чек-листы ---------- */
-.legend { margin: 0 0 24px; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.legend { margin: 0 0 24px; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 9px 22px; }
 .legend li { display: flex; align-items: center; gap: 8px; font-size: .84rem; color: var(--ink-soft); }
 
-.filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 26px; }
+.filters { display: flex; flex-wrap: wrap; gap: 9px; margin: 0 0 30px; }
 .filters button {
-  font: inherit; font-size: .87rem; cursor: pointer;
-  padding: 8px 16px; border-radius: 8px;
+  display: inline-flex; align-items: center; gap: 8px;
+  font: inherit; font-size: .88rem; cursor: pointer;
+  padding: 10px 18px; border-radius: 10px;
   border: 1px solid var(--line-hard); background: var(--raise); color: var(--ink-soft);
+  transition: border-color .18s ease, transform .18s ease, background .18s ease;
 }
-.filters button:hover { border-color: var(--accent); }
+.filters button .ico { width: 17px; height: 17px; }
+.filters button:hover { border-color: var(--accent); transform: translateY(-2px); }
 .filters button.on { background: var(--accent); border-color: var(--accent); color: #FFF; }
-@media (prefers-color-scheme: dark) { .filters button.on { color: #06201D; } }
+@media (prefers-color-scheme: dark) { .filters button.on { color: #05201D; } }
 
-.block { margin: 0 0 44px; }
-.block h3 { margin: 0 0 6px; font-size: 1.32rem; font-weight: 700; }
+.block { --hue: var(--tone); margin: 0 0 46px; }
+@media (prefers-color-scheme: dark) { .block { --hue: var(--tone-dark); } }
+
+.block__head { display: flex; gap: 15px; align-items: flex-start; margin-bottom: 14px; }
+.block__ico {
+  display: inline-flex; padding: 11px; border-radius: 13px; flex: none;
+  color: var(--hue); background: color-mix(in srgb, var(--hue) 13%, transparent);
+}
+.block__ico .ico { width: 24px; height: 24px; }
+.block__title { min-width: 0; }
+.block h3 { margin: 0 0 5px; font-size: 1.34rem; font-weight: 600; }
 .block h3 .count {
   font-family: var(--f-mono); font-size: .68rem; font-weight: 600;
-  color: var(--ink-mute); vertical-align: middle; margin-left: 6px;
+  color: #FFF; background: var(--hue); padding: 3px 8px; border-radius: 999px;
+  vertical-align: middle; margin-left: 7px;
 }
-.block__intro { margin: 0 0 16px; color: var(--ink-soft); font-size: .93rem; max-width: 66ch; }
+@media (prefers-color-scheme: dark) { .block h3 .count { color: #0B1211; } }
+.block__intro { margin: 0; color: var(--ink-soft); font-size: .92rem; max-width: 66ch; }
+
+.barline { display: flex; align-items: center; gap: 12px; margin-bottom: 15px; }
+.bar {
+  position: relative; flex: 1 1 auto; max-width: 320px; height: 10px;
+  border-radius: 6px; overflow: hidden;
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
+}
+.bar__fill {
+  position: absolute; inset: 0 auto 0 0; width: var(--share); border-radius: 6px;
+  background: var(--hue);
+  transform-origin: left; transition: transform .9s cubic-bezier(.2,.7,.3,1) .15s;
+}
+/* Полоса наполняется при появлении блока. Без скриптов она просто сразу полная. */
+.js .rise:not(.in) .bar__fill { transform: scaleX(0); }
+.bar__text {
+  flex: none; font-family: var(--f-mono); font-size: .7rem;
+  color: var(--ink-soft); letter-spacing: .03em;
+}
+.bar__text b { color: var(--ink); font-weight: 600; }
 
 .checks { margin: 0; padding: 0; list-style: none; counter-reset: c; }
 .chk {
   counter-increment: c; position: relative;
   background: var(--raise); border: 1px solid var(--line);
-  padding: 15px 18px 15px 48px;
+  padding: 16px 18px 16px 50px;
+  transition: background .15s ease;
 }
-.chk:first-child { border-radius: 11px 11px 0 0; }
-.chk:last-child { border-radius: 0 0 11px 11px; }
+.chk:hover { background: color-mix(in srgb, var(--hue) 5%, var(--raise)); }
+.chk:first-child { border-radius: 12px 12px 0 0; }
+.chk:last-child { border-radius: 0 0 12px 12px; }
 .chk + .chk { border-top: none; }
 .chk::before {
-  content: counter(c, decimal-leading-zero); position: absolute; left: 17px; top: 17px;
-  font-family: var(--f-mono); font-size: .7rem; font-weight: 600; color: var(--ink-mute);
+  content: counter(c, decimal-leading-zero); position: absolute; left: 17px; top: 18px;
+  font-family: var(--f-mono); font-size: .7rem; font-weight: 600; color: var(--hue);
   font-variant-numeric: tabular-nums;
 }
 .chk__head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.chk__head h4 { margin: 0; font-size: 1.02rem; font-weight: 700; }
+.chk__head h4 { margin: 0; font-size: 1.02rem; font-weight: 600; }
 .chk__why { margin: 6px 0 0; font-size: .92rem; color: var(--ink-soft); }
 .chk__how {
-  margin: 9px 0 0; font-size: .87rem; color: var(--ink-soft);
-  border-left: 2px solid var(--accent); padding-left: 12px;
+  margin: 10px 0 0; font-size: .87rem; color: var(--ink-soft);
+  border-left: 2px solid var(--hue); padding-left: 13px;
 }
 .chk__how span {
   display: block; font-family: var(--f-mono); font-size: .63rem; font-weight: 600;
@@ -511,53 +918,66 @@ h1, h2, h3, h4 { font-family: var(--f-head); letter-spacing: -.02em; text-wrap: 
 .tag {
   flex: none; font-family: var(--f-mono); font-size: .62rem; font-weight: 600;
   letter-spacing: .08em; text-transform: uppercase;
-  padding: 3px 8px; border-radius: 5px; white-space: nowrap;
+  padding: 3px 9px; border-radius: 6px; white-space: nowrap;
   border: 1px solid currentColor;
 }
 .tag--auto { color: var(--ok); }
 .tag--both { color: var(--accent-ink); }
 .tag--manual { color: var(--warn); }
-.tag--service { color: var(--info); }
+.tag--service { color: var(--sky); }
 
-/* отбор: прячем неподходящие пункты и опустевшие разделы */
 .lists[data-mode="machine"] .chk[data-side="human"],
 .lists[data-mode="human"] .chk[data-side="machine"] { display: none; }
 .lists[data-mode="machine"] .block[data-machine="0"],
 .lists[data-mode="human"] .block[data-human="0"] { display: none; }
 .lists[data-mode="machine"] .chk[data-side="machine"]:first-of-type,
-.lists[data-mode="human"] .chk[data-side="human"]:first-of-type { border-radius: 11px 11px 0 0; }
+.lists[data-mode="human"] .chk[data-side="human"]:first-of-type { border-radius: 12px 12px 0 0; }
 .lists[data-mode="machine"] .chk[data-side="machine"]:last-of-type,
-.lists[data-mode="human"] .chk[data-side="human"]:last-of-type { border-radius: 0 0 11px 11px; }
+.lists[data-mode="human"] .chk[data-side="human"]:last-of-type { border-radius: 0 0 12px 12px; }
+.lists[data-mode="machine"] .barline, .lists[data-mode="human"] .barline { display: none; }
 
 /* ---------- правила ---------- */
-.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 18px; }
-.table { width: 100%; border-collapse: collapse; font-size: .92rem; }
-.table caption {
-  text-align: left; font-family: var(--f-mono); font-size: .66rem; font-weight: 600;
-  letter-spacing: .12em; text-transform: uppercase; color: var(--ink-mute); padding-bottom: 8px;
+.sevs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 13px; margin-bottom: 30px; }
+.sevcard {
+  border: 1px solid var(--line); border-left: 4px solid currentColor;
+  border-radius: 13px; padding: 17px 19px; background: var(--raise);
 }
-.table td { padding: 9px 0; border-bottom: 1px solid var(--line); color: var(--ink-soft); }
-.table .num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+.sevcard--critical { color: var(--crit); }
+.sevcard--important { color: var(--warn); }
+.sevcard--minor { color: var(--ink-mute); }
+.sevcard__num { display: block; font-family: var(--f-head); font-weight: 800; font-size: 2rem; line-height: 1; }
+.sevcard__label {
+  display: block; margin-top: 7px; font-family: var(--f-mono); font-size: .66rem;
+  font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mute);
+}
 
-.findings { display: grid; gap: 12px; }
+.rulebars { margin: 0; padding: 0; list-style: none; }
+.rulebars li {
+  display: grid; grid-template-columns: minmax(0, 1fr) 130px 40px; gap: 14px;
+  align-items: center; padding: 9px 0; border-bottom: 1px solid var(--line);
+  font-size: .91rem; color: var(--ink-soft);
+}
+.rule__bar { height: 8px; border-radius: 5px; background: var(--accent-soft); overflow: hidden; }
+.rule__bar i { display: block; height: 100%; width: var(--w); background: var(--accent); border-radius: 5px; }
+.rule__num { text-align: right; font-family: var(--f-mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+@media (max-width: 560px) { .rulebars li { grid-template-columns: minmax(0,1fr) 46px; } .rule__bar { display: none; } }
+
+.findings { display: grid; gap: 13px; }
 .finding {
   background: var(--raise); border: 1px solid var(--line);
-  border-left: 3px solid var(--line-hard); border-radius: 10px; padding: 17px 19px;
+  border-left: 4px solid var(--line-hard); border-radius: 13px; padding: 19px 21px;
 }
 .finding--critical { border-left-color: var(--crit); }
 .finding--important { border-left-color: var(--warn); }
 .finding--minor { border-left-color: var(--ink-mute); }
-.finding__head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
-.finding__head h4 { margin: 0; font-size: 1.04rem; font-weight: 700; }
-.sev {
-  font-family: var(--f-mono); font-size: .62rem; font-weight: 600;
-  letter-spacing: .1em; text-transform: uppercase;
-}
+.finding__head { display: flex; align-items: baseline; gap: 11px; flex-wrap: wrap; }
+.finding__head h4 { margin: 0; font-size: 1.06rem; font-weight: 600; }
+.sev { font-family: var(--f-mono); font-size: .62rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; }
 .finding--critical .sev { color: var(--crit); }
 .finding--important .sev { color: var(--warn); }
 .finding--minor .sev { color: var(--ink-mute); }
-.finding__msg { margin: 8px 0 0; font-size: .95rem; }
-.finding__row { margin: 8px 0 0; font-size: .89rem; color: var(--ink-soft); }
+.finding__msg { margin: 9px 0 0; font-size: .95rem; }
+.finding__row { margin: 9px 0 0; font-size: .89rem; color: var(--ink-soft); }
 .finding__row span {
   display: block; font-family: var(--f-mono); font-size: .62rem; font-weight: 600;
   letter-spacing: .11em; text-transform: uppercase; color: var(--ink-mute);
@@ -565,28 +985,36 @@ h1, h2, h3, h4 { font-family: var(--f-head); letter-spacing: -.02em; text-wrap: 
 
 /* ---------- запуск ---------- */
 pre {
-  background: var(--deep); color: #D8E6E3; border-radius: 11px;
-  padding: 18px 20px; overflow-x: auto; font-size: .87rem; line-height: 1.7;
+  background: var(--deep); color: #D9E9E6; border-radius: 13px;
+  padding: 20px 22px; overflow-x: auto; font-size: .87rem; line-height: 1.75;
+  border: 1px solid #1C3B37;
 }
 pre code { font-family: var(--f-mono); }
-.sec p code { background: var(--accent-soft); color: var(--ink); padding: 1px 5px; border-radius: 4px; }
+.sec p code { font-family: var(--f-mono); font-size: .86em; background: var(--accent-soft); color: var(--ink); padding: 2px 6px; border-radius: 5px; }
 
 /* ---------- подвал ---------- */
-.foot { background: var(--deep); color: #A9BFBB; padding: 40px 0; font-size: .88rem; }
-.foot a { color: #7FCFC7; }
-.foot p { margin: 0; max-width: 70ch; }
-.foot__note { margin-top: 10px; color: #7C918D; font-size: .82rem; }
+.foot { background: var(--deep); color: #A7BEBA; padding: 48px 0; font-size: .88rem; }
+.foot a { color: #6FE0D2; }
+.foot p { margin: 0 0 8px; max-width: 72ch; }
+.foot__big { display: flex; align-items: center; gap: 10px; font-size: 1.02rem; font-weight: 600; }
+.foot__big .ico { width: 21px; height: 21px; color: #6FE0D2; }
+.foot__note { margin-top: 14px; color: #7E938F; font-size: .82rem; }
 
 @media (max-width: 560px) {
   body { font-size: 16px; }
-  .hero { padding: 52px 0 44px; }
-  .sec { padding: 46px 0; }
-  .chk { padding: 14px 15px 14px 42px; }
+  .hero { padding-top: 52px; }
+  .sec { padding: 52px 0; }
+  .chk { padding: 15px 15px 15px 44px; }
   .chk__head { flex-wrap: wrap; }
   .chk__head h4 { flex: 1 1 100%; }
+  .block__head { gap: 12px; }
 }
+
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  .rise { opacity: 1; transform: none; }
+  .bar__fill { transform: scaleX(1); }
 }`
 }
 

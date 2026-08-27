@@ -70,6 +70,47 @@ export async function fetchText(url, options = {}) {
   }
 }
 
+/**
+ * Коды, которыми сервер просит притормозить.
+ *
+ * Их нельзя трактовать как ответ по существу. Один раз мы уже поймали на этом
+ * одиннадцать «битых» ссылок, которые оказались живыми: сайт просто защищался
+ * от слишком частых запросов. В аудите такая ошибка дороже пропуска.
+ */
+export const THROTTLED = new Set([429, 503])
+
+export const isThrottled = (status) => THROTTLED.has(status)
+
+export const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Один запрос без прохода по переадресациям, с повтором при просьбе притормозить.
+ *
+ * @returns {{reachable: boolean, status: number|null, location: string|null, throttled: boolean}}
+ */
+export async function probe(url, options = {}) {
+  const { timeoutMs = 15000, retryPauseMs = 1200 } = options
+
+  try {
+    let response = await request(url, { timeoutMs, redirect: 'manual' })
+
+    if (isThrottled(response.status)) {
+      await sleep(retryPauseMs)
+      response = await request(url, { timeoutMs, redirect: 'manual' })
+    }
+
+    return {
+      reachable: true,
+      status: response.status,
+      location: response.headers.get('location'),
+      throttled: isThrottled(response.status),
+      headers: response.headers,
+    }
+  } catch (error) {
+    return { reachable: false, status: null, location: null, throttled: false, error }
+  }
+}
+
 /** Приводит ошибку сети к понятному человеку тексту. */
 export function describeError(error, timeoutMs = 15000) {
   if (error.name === 'TimeoutError') return `Нет ответа за ${timeoutMs} мс`

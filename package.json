@@ -1,6 +1,6 @@
 {
   "name": "seo-revizor",
-  "version": "0.4.0",
+  "version": "0.6.0",
   "description": "Агент-ревизор: проверяет сайт по чек-листу",
   "main": "index.js",
   "scripts": {

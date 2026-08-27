@@ -14,6 +14,11 @@ import { checkMeta } from '../src/checks/meta.js'
 import { checkRobots } from '../src/checks/robots.js'
 import { checkSitemap } from '../src/checks/sitemap.js'
 import { checkLinks } from '../src/checks/links.js'
+import { checkMirrors } from '../src/checks/mirrors.js'
+import { checkSecurity } from '../src/checks/security.js'
+import { checkAnalytics } from '../src/checks/analytics.js'
+import { checkContent } from '../src/checks/content.js'
+import { checkSpeed } from '../src/checks/speed.js'
 import { SEVERITY_LABELS, SEVERITIES } from '../src/rules/index.js'
 
 const CHECKS = {
@@ -22,6 +27,11 @@ const CHECKS = {
   robots: { run: checkRobots, print: printRobots },
   sitemap: { run: checkSitemap, print: printSitemap },
   links: { run: checkLinks, print: printLinks },
+  mirrors: { run: checkMirrors, print: printMirrors },
+  security: { run: checkSecurity, print: printSecurity },
+  analytics: { run: checkAnalytics, print: printAnalytics },
+  content: { run: (target) => checkContent(target.split(',')), print: printContent },
+  speed: { run: checkSpeed, print: printSpeed },
 }
 
 const [name, target] = process.argv.slice(2)
@@ -153,6 +163,75 @@ function printLinks(r) {
 
   if (r.external.hosts.length) {
     console.log('\n  внешние домены: ' + r.external.hosts.slice(0, 8).join(', '))
+  }
+}
+
+function printMirrors(r) {
+  line('без www', r.mirrors.withoutWww.status + (r.mirrors.withoutWww.redirectsTo ? ' → ' + r.mirrors.withoutWww.redirectsTo : ''))
+  line('с www', r.mirrors.withWww.status + (r.mirrors.withWww.redirectsTo ? ' → ' + r.mirrors.withWww.redirectsTo : ''))
+  line('http', 'шагов ' + r.insecure.hops + ', итог ' + r.insecure.finalStatus)
+  line('дубли главной', r.indexDuplicates.length ? r.indexDuplicates.join(', ') : 'нет')
+  line('слэш', r.slash ? `со слэшем ${r.slash.withSlash}, без ${r.slash.withoutSlash}` : 'не проверялся')
+  line('несуществующая', r.missingPageStatus)
+}
+
+function printSecurity(r) {
+  if (r.certificate) {
+    line('сертификат', r.certificate.error || `до ${r.certificate.validTo}, осталось ${r.certificate.daysLeft} дн.`)
+  }
+  line('cookie', r.cookies)
+  line('служебные файлы', r.exposedFiles.length ? r.exposedFiles.join(', ') : 'закрыты')
+  line('листинг папок', r.directoryListings.length ? r.directoryListings.join(', ') : 'выключен')
+  line('смешанное', r.mixedContent.length)
+
+  const guards = ['strict-transport-security', 'x-content-type-options', 'x-frame-options', 'referrer-policy', 'content-security-policy']
+  console.log('\n' + '  защитные заголовки:')
+  for (const name of guards) {
+    console.log(`    ${name.padEnd(28)} ${r.headers[name] ? 'есть' : '— нет —'}`)
+  }
+}
+
+function printAnalytics(r) {
+  line('найдено', r.summaryLine)
+  for (const counter of r.counters) {
+    console.log(`    ${counter.name.padEnd(22)} подключений: ${counter.count}${counter.blocking ? ', синхронно' : ''}`)
+  }
+}
+
+function printContent(r) {
+  line('страниц сравнено', r.checked)
+  line('пар с дублями', r.duplicates.length)
+  line('телефонов найдено', r.phones.length)
+  console.log('\n' + '  объём страниц:')
+  for (const page of r.pages) {
+    console.log(`    ${String(page.words).padStart(6)} слов  ${shortUrl(page.url)}`)
+  }
+}
+
+function printSpeed(r) {
+  if (r.needsKey) {
+    console.log('  ' + r.hint)
+    return
+  }
+  line('оценка', r.score + ' из 100')
+  for (const [name, value] of Object.entries(r.metrics)) {
+    if (value) line(name.toUpperCase(), value)
+  }
+  if (r.opportunities.length) {
+    console.log('\n' + '  что тормозит:')
+    for (const item of r.opportunities) {
+      const saving = item.unit === 'ms' ? Math.round(item.saving) + ' мс' : Math.round(item.saving / 1024) + ' КБ'
+      console.log(`    ${saving.padStart(9)}  ${item.title}`)
+    }
+  }
+}
+
+function shortUrl(url) {
+  try {
+    const parsed = new URL(url)
+    return parsed.pathname + parsed.search || '/'
+  } catch {
+    return url
   }
 }
 

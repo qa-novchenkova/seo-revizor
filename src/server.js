@@ -17,11 +17,16 @@ import { checkMeta } from './checks/meta.js'
 import { checkRobots } from './checks/robots.js'
 import { checkSitemap } from './checks/sitemap.js'
 import { checkLinks } from './checks/links.js'
+import { checkMirrors } from './checks/mirrors.js'
+import { checkSecurity } from './checks/security.js'
+import { checkAnalytics } from './checks/analytics.js'
+import { checkContent } from './checks/content.js'
+import { checkSpeed } from './checks/speed.js'
 import { allRules, rulesByArea } from './rules/index.js'
 
 // McpServer — класс из SDK. Объект хранит список инструментов и знает,
 // какой обработчик вызвать, когда придёт запрос на выполнение.
-const server = new McpServer({ name: 'seo-revizor', version: '0.3.0' })
+const server = new McpServer({ name: 'seo-revizor', version: '0.6.0' })
 
 /**
  * Небольшая обёртка, чтобы не повторять одно и то же в каждом инструменте.
@@ -125,6 +130,84 @@ tool(
 )
 
 tool(
+  'check_mirrors',
+  {
+    title: 'Зеркала и дубли адресов',
+    description:
+      'Проверяет, не видит ли поисковик вместо одного сайта несколько копий: адрес с www ' +
+      'и без, версия по http, технические дубли главной вроде /index.php, слэш на конце, ' +
+      'параметры в адресе, а также отдаёт ли несуществующая страница честный код 404. ' +
+      'Вызывай в начале аудита: пока сайт двоится, остальные правки почти бессмысленны.',
+    inputSchema: { url: z.string().describe('Адрес сайта, например https://example.com/') },
+  },
+  ({ url }) => checkMirrors(url),
+)
+
+tool(
+  'check_security',
+  {
+    title: 'Безопасность',
+    description:
+      'Смотрит срок и корректность сертификата, защитные заголовки, атрибуты cookie, ' +
+      'смешанное содержимое, доступность служебных файлов вроде .git и .env, открытый ' +
+      'список файлов в папках и показ подробностей ошибки на боевом сервере. ' +
+      'Раздел, который в SEO-аудитах обычно пропускают, а находки там заметные.',
+    inputSchema: { url: z.string().describe('Адрес сайта') },
+  },
+  ({ url }) => checkSecurity(url),
+)
+
+tool(
+  'check_analytics',
+  {
+    title: 'Аналитика',
+    description:
+      'Ищет системы аналитики в разметке: Яндекс.Метрика, Google Analytics, Tag Manager ' +
+      'и другие. Проверяет, не задвоен ли счётчик, не грузится ли синхронно и стоит ли он ' +
+      'на других страницах тоже. Без счётчика нельзя ответить на вопрос «что сработало».',
+    inputSchema: {
+      url: z.string().describe('Адрес страницы, обычно главной'),
+      alsoCheck: z.array(z.string()).optional().describe('Другие адреса, где тоже должен стоять счётчик'),
+    },
+  },
+  ({ url, alsoCheck }) => checkAnalytics(url, { alsoCheck: alsoCheck ?? [] }),
+)
+
+tool(
+  'check_content',
+  {
+    title: 'Контент и дубли',
+    description:
+      'Сравнивает несколько страниц между собой: одинаковые title и описания, повторяющийся ' +
+      'текст, слишком короткие и пустые страницы, остатки демонстрационного текста, ' +
+      'расхождения в телефонах. Единственная проверка, которой нужна не одна страница, ' +
+      'а набор: дубли по определению видны только при сравнении. Передавай адреса ' +
+      'из выборки, которую вернул check_sitemap, или из обхода ссылок.',
+    inputSchema: {
+      urls: z.array(z.string()).describe('Список адресов для сравнения, от двух до десяти'),
+    },
+  },
+  ({ urls }) => checkContent(urls),
+)
+
+tool(
+  'check_speed',
+  {
+    title: 'Скорость и Core Web Vitals',
+    description:
+      'Измеряет скорость через бесплатный сервис PageSpeed Insights: общая оценка, ' +
+      'LCP, CLS, INP, время ответа сервера, а также что именно тормозит — блокирующие ' +
+      'ресурсы, тяжёлые картинки, лишний код, отсутствие кеширования. ' +
+      'Требует бесплатного ключа: без него честно скажет, что раздел пропущен.',
+    inputSchema: {
+      url: z.string().describe('Адрес страницы'),
+      strategy: z.enum(['mobile', 'desktop']).optional().describe('Устройство, по умолчанию mobile'),
+    },
+  },
+  ({ url, strategy }) => checkSpeed(url, { strategy: strategy ?? 'mobile' }),
+)
+
+tool(
   'list_rules',
   {
     title: 'Чек-лист проверок',
@@ -154,4 +237,4 @@ tool(
 // stdio — это способ связи: клиент запускает сервер как обычную программу
 // и разговаривает с ним через её ввод и вывод. Никаких портов и сети.
 await server.connect(new StdioServerTransport())
-console.error(`Ревизор запущен, инструментов: 6, правил в чек-листе: ${allRules().length}`)
+console.error(`Ревизор запущен, инструментов: 11, правил в чек-листе: ${allRules().length}`)

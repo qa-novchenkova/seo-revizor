@@ -8,7 +8,8 @@
     "check": "node test/check.js",
     "mcp": "node test/mcp.js",
     "audit": "node test/audit.js",
-    "loop": "node test/loop.js"
+    "loop": "node test/loop.js",
+    "report": "node test/report.js"
   },
   "keywords": [],
   "author": "",

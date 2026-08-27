@@ -24,7 +24,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
-import { SEVERITY_LABELS } from './rules/index.js'
+import { SEVERITY_LABELS, SEVERITIES } from './rules/index.js'
 
 const MODEL = process.env.REVIZOR_MODEL || 'claude-opus-5'
 
@@ -67,6 +67,30 @@ function textOf(result) {
     .filter((block) => block.type === 'text')
     .map((block) => block.text)
     .join('\n')
+}
+
+/**
+ * Вытаскивает находки из ответа инструмента и складывает в общую копилку.
+ *
+ * Ключ — правило плюс адрес: одна и та же беда на двух страницах это две
+ * находки, а на одной странице дважды — одна. По этому же ключу потом
+ * сравниваются два прогона.
+ */
+function collect(text, call, findings, pages) {
+  let data
+  try {
+    data = JSON.parse(text)
+  } catch {
+    return
+  }
+
+  const url = data.finalUrl || data.url || call.input?.url
+  if (url) pages.add(url)
+
+  for (const finding of data.findings || []) {
+    const key = `${finding.id}@${url}`
+    if (!findings.has(key)) findings.set(key, { ...finding, url, tool: call.name })
+  }
 }
 
 function short(value, max = 90) {
@@ -119,6 +143,12 @@ export async function audit(site, options = {}) {
   const messages = [{ role: 'user', content: `Проверь сайт ${site} и напиши отчёт.` }]
 
   const calls = []
+  // Находки собираем сами из ответов инструментов. Модель пишет связный текст,
+  // но для сравнения прогонов нужны данные с постоянными идентификаторами,
+  // а не пересказ.
+  const findings = new Map()
+  const pages = new Set()
+
   let inputTokens = 0
   let outputTokens = 0
   let report = ''
@@ -165,6 +195,7 @@ export async function audit(site, options = {}) {
         const answer = await mcp.callTool({ name: call.name, arguments: call.input })
         const text = textOf(answer)
         calls.push({ name: call.name, input: call.input, ok: !answer.isError })
+        collect(text, call, findings, pages)
         results.push({ type: 'tool_result', tool_use_id: call.id, content: text, is_error: !!answer.isError })
         onStep({ type: 'result', name: call.name, ok: !answer.isError, text })
       } catch (error) {
@@ -189,7 +220,21 @@ export async function audit(site, options = {}) {
   const price = PRICE[MODEL]
   const cost = price ? (inputTokens / 1e6) * price.input + (outputTokens / 1e6) * price.output : null
 
-  return { site, model: MODEL, report, calls, stoppedBy, usage: { inputTokens, outputTokens, cost } }
+  const collected = [...findings.values()].sort(
+    (a, b) => SEVERITIES.indexOf(a.severity) - SEVERITIES.indexOf(b.severity),
+  )
+
+  return {
+    site,
+    model: MODEL,
+    finishedAt: new Date().toISOString(),
+    report,
+    findings: collected,
+    pages: [...pages],
+    calls,
+    stoppedBy,
+    usage: { inputTokens, outputTokens, cost },
+  }
 }
 
 /** Печать шагов, чтобы цикл было видно в реальном времени. */

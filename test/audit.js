@@ -1,12 +1,20 @@
 /**
- * Запуск агента.
+ * Запуск агента и сборка отчёта.
  *
  *   node test/audit.js https://example.com/
  *
  * В отличие от test/mcp.js, где порядок вызовов прописан руками,
  * здесь его выбирает модель. Каждый её ход печатается, чтобы цикл был виден.
+ *
+ * После прогона собираются документы: Markdown, HTML и PDF. Если по этому
+ * сайту уже был прогон, добавляется раздел «что изменилось».
  */
+
 import { audit, consoleReporter } from '../src/agent.js'
+import { toMarkdown, toHtml } from '../src/report.js'
+import { saveRun, previousRun, compare } from '../src/store.js'
+import { htmlToPdf, findBrowser } from '../src/pdf.js'
+import { SEVERITY_LABELS, SEVERITIES } from '../src/rules/index.js'
 
 const site = process.argv[2]
 
@@ -28,6 +36,8 @@ if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
   Один прогон стоит порядка нескольких центов. Модель можно сменить:
 
     export REVIZOR_MODEL=claude-haiku-4-5
+
+  Проверить цикл без ключа и бесплатно: npm run loop
 `)
   process.exit(1)
 }
@@ -39,18 +49,61 @@ const started = Date.now()
 const result = await audit(site, { onStep: consoleReporter() })
 const seconds = ((Date.now() - started) / 1000).toFixed(1)
 
+// ── отчёт ────────────────────────────────────────────────────────────────────
+const previous = previousRun(site, result.finishedAt)
+const diff = compare(result, previous)
+
+const saved = saveRun(result, {
+  md: toMarkdown(result, diff),
+  html: toHtml(result, diff),
+})
+
 console.log('\n' + '═'.repeat(78))
 console.log('  ОТЧЁТ')
 console.log('═'.repeat(78) + '\n')
 console.log(result.report)
 
+const counts = {}
+for (const level of SEVERITIES) counts[level] = 0
+for (const finding of result.findings) counts[finding.severity] += 1
+
 console.log('\n' + '─'.repeat(78))
 console.log(
-  `  вызовов инструментов: ${result.calls.length} · время: ${seconds} с · ` +
+  `  находок: ${result.findings.length} (` +
+    SEVERITIES.filter((level) => counts[level])
+      .map((level) => `${SEVERITY_LABELS[level]}: ${counts[level]}`)
+      .join(', ') +
+    ')',
+)
+
+if (diff) {
+  console.log(
+    `  с прошлой проверки: исправлено ${diff.fixed.length}, ` +
+      `появилось ${diff.appeared.length}, осталось ${diff.stayed.length}`,
+  )
+}
+
+console.log(
+  `  вызовов: ${result.calls.length} · время: ${seconds} с · ` +
     `токенов: ${result.usage.inputTokens} на вход, ${result.usage.outputTokens} на выход` +
     (result.usage.cost !== null ? ` · примерно $${result.usage.cost.toFixed(3)}` : ''),
 )
+
 if (result.stoppedBy === 'limit') {
   console.log('  остановлено по лимиту кругов: модель не успела дописать отчёт')
 }
+
+// ── печать в PDF ─────────────────────────────────────────────────────────────
+console.log('\n  файлы:')
+console.log(`    ${saved.files.md}`)
+console.log(`    ${saved.files.html}`)
+
+if (findBrowser()) {
+  const pdfPath = `${saved.base}.pdf`
+  const printed = await htmlToPdf(saved.files.html, pdfPath)
+  console.log(printed.ok ? `    ${pdfPath}` : `    PDF не собрался: ${printed.reason}`)
+} else {
+  console.log('    PDF пропущен: не найден Chrome или Edge. Откройте HTML и напечатайте в PDF из браузера.')
+}
+
 console.log('')

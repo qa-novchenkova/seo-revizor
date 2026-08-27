@@ -219,9 +219,16 @@ function printSpeed(r) {
     return
   }
   line('оценка', r.score + ' из 100')
+  const names = { lcp: 'LCP', cls: 'CLS', inp: 'INP', ttfb: 'ответ сервера', total: 'вес страницы' }
   for (const [name, value] of Object.entries(r.metrics)) {
-    if (value) line(name.toUpperCase(), value)
+    if (value) line(names[name] || name, value)
   }
+  if (r.lcpElement) line('крупный элемент', cut(r.lcpElement, 60))
+  if (r.diagnostics?.length) {
+    console.log('\n  отмечено сервисом:')
+    for (const item of r.diagnostics) console.log('    • ' + item)
+  }
+
   if (r.opportunities.length) {
     console.log('\n' + '  что тормозит:')
     for (const item of r.opportunities) {

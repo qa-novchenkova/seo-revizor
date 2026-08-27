@@ -10,7 +10,8 @@
     "audit": "node test/audit.js",
     "loop": "node test/loop.js",
     "report": "node test/report.js",
-    "keys": "node test/keys.js"
+    "keys": "node test/keys.js",
+    "speed": "node test/speed.js"
   },
   "keywords": [],
   "author": "",

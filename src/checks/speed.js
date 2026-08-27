@@ -15,9 +15,50 @@ const ENDPOINT = 'https://www.googleapis.com/pagespeedonline/v5/runPagespeed'
 /** Пороги Core Web Vitals — те же, по которым оценивают поисковые системы. */
 const LIMITS = { lcp: 2500, cls: 0.1, inp: 200, ttfb: 800 }
 
-/** Сколько потерь на пункте считаем достойным упоминания, в миллисекундах и байтах. */
-const WORTH_MENTION_MS = 300
-const WORTH_MENTION_BYTES = 100 * 1024
+/** Вес страницы, после которого стоит бить тревогу. */
+const HEAVY_PAGE_BYTES = 2 * 1024 * 1024
+
+/**
+ * Пороги упоминания. Занижены намеренно: при первой версии на сайте
+ * с оценкой 85 и четырьмя секундами LCP список «что тормозит» вышел пустым,
+ * то есть отчёт называл проблему и не подсказывал причину.
+ */
+const WORTH_MENTION_MS = 100
+const WORTH_MENTION_BYTES = 20 * 1024
+
+/** Что именно проверяем и к какому правилу это относится. */
+const OPPORTUNITIES = [
+  ['render-blocking-resources', 'render-blocking', 'ms'],
+  ['render-blocking-insight', 'render-blocking', 'ms'],
+  ['modern-image-formats', 'images-heavy', 'bytes'],
+  ['uses-optimized-images', 'images-heavy', 'bytes'],
+  ['image-delivery-insight', 'images-heavy', 'bytes'],
+  ['uses-responsive-images', 'images-oversized', 'bytes'],
+  ['unused-css-rules', 'unused-code', 'bytes'],
+  ['unused-javascript', 'unused-code', 'bytes'],
+  ['legacy-javascript', 'unused-code', 'bytes'],
+  ['duplicated-javascript', 'unused-code', 'bytes'],
+  ['uses-long-cache-ttl', 'no-cache-headers', 'bytes'],
+  ['cache-insight', 'no-cache-headers', 'bytes'],
+  ['uses-text-compression', 'no-compression', 'bytes'],
+  ['mainthread-work-breakdown', 'main-thread-busy', 'ms'],
+  ['bootup-time', 'main-thread-busy', 'ms'],
+  ['third-party-summary', 'third-party-heavy', 'ms'],
+]
+
+/** Пункты, которые просто перечисляем списком, без отдельного правила на каждый. */
+const DIAGNOSTIC_IDS = [
+  'uses-rel-preconnect',
+  'font-display',
+  'redirects',
+  'critical-request-chains',
+  'dom-size',
+  'efficient-animated-content',
+  'prioritize-lcp-image',
+  'lcp-lazy-loaded',
+  'network-dependency-tree-insight',
+  'forced-reflow-insight',
+]
 
 export async function checkSpeed(url, options = {}) {
   const { strategy = 'mobile', timeoutMs = 90000 } = options
@@ -76,6 +117,15 @@ export async function checkSpeed(url, options = {}) {
     return { url, ok: false, error: 'Сервис вернул ответ без результатов измерения', findings: [], summary: {} }
   }
 
+  return { url, ...interpret(lighthouse, strategy) }
+}
+
+/**
+ * Разбор ответа сервиса вынесен отдельно, чтобы его можно было проверить
+ * на записанных данных: обращение к сервису идёт минуту и тратит квоту.
+ */
+export function interpret(lighthouse, strategy = 'mobile') {
+  const found = reporter()
   const device = strategy === 'mobile' ? 'мобильных' : 'десктопе'
   const audits = lighthouse.audits || {}
   const score = Math.round((lighthouse.categories?.performance?.score ?? 0) * 100)
@@ -86,40 +136,38 @@ export async function checkSpeed(url, options = {}) {
 
   // ── основные показатели ───────────────────────────────────────────────────
   const metrics = {
-    lcp: pick(audits['largest-contentful-paint']),
-    cls: pick(audits['cumulative-layout-shift']),
-    inp: pick(audits['interaction-to-next-paint']) || pick(audits['experimental-interaction-to-next-paint']),
-    ttfb: pick(audits['server-response-time']),
+    lcp: metric(audits['largest-contentful-paint'], 'ms'),
+    cls: metric(audits['cumulative-layout-shift'], 'raw'),
+    inp: metric(audits['interaction-to-next-paint'], 'ms'),
+    ttfb: metric(audits['server-response-time'], 'ms'),
+    total: metric(audits['total-byte-weight'], 'bytes'),
   }
 
   if (over(metrics.lcp, LIMITS.lcp)) found.add('lcp-slow', { device, value: metrics.lcp.display })
   if (over(metrics.cls, LIMITS.cls)) found.add('cls-high', { device, value: metrics.cls.display })
   if (over(metrics.inp, LIMITS.inp)) found.add('inp-slow', { device, value: metrics.inp.display })
   if (over(metrics.ttfb, LIMITS.ttfb)) found.add('ttfb-slow', { device, value: metrics.ttfb.display })
+  if (over(metrics.total, HEAVY_PAGE_BYTES)) found.add('page-heavy', { value: metrics.total.display })
 
-  // ── что именно тормозит ───────────────────────────────────────────────────
-  const opportunities = [
-    ['render-blocking-resources', 'render-blocking', 'ms'],
-    ['modern-image-formats', 'images-heavy', 'bytes'],
-    ['uses-optimized-images', 'images-heavy', 'bytes'],
-    ['uses-responsive-images', 'images-oversized', 'bytes'],
-    ['unused-css-rules', 'unused-code', 'bytes'],
-    ['unused-javascript', 'unused-code', 'bytes'],
-    ['uses-long-cache-ttl', 'no-cache-headers', 'bytes'],
-  ]
+  // ── что именно является самым крупным элементом ───────────────────────────
+  const lcpElement = describeLcpElement(audits)
+  if (lcpElement && over(metrics.lcp, LIMITS.lcp)) {
+    found.add('lcp-element', { element: lcpElement })
+  }
 
+  if (failed(audits['lcp-lazy-loaded']) || failed(audits['prioritize-lcp-image'])) {
+    found.add('lcp-image-lazy')
+  }
+
+  // ── что тормозит ──────────────────────────────────────────────────────────
   const reported = new Set()
   const details = []
 
-  for (const [auditId, ruleId, unit] of opportunities) {
+  for (const [auditId, ruleId, unit] of OPPORTUNITIES) {
     const audit = audits[auditId]
-    if (!audit || audit.score === 1 || audit.score === null) continue
+    if (!audit || audit.score === null || audit.score >= 0.9) continue
 
-    const saving =
-      unit === 'ms'
-        ? audit.details?.overallSavingsMs ?? audit.numericValue ?? 0
-        : audit.details?.overallSavingsBytes ?? audit.numericValue ?? 0
-
+    const saving = savingOf(audit, unit)
     const enough = unit === 'ms' ? saving >= WORTH_MENTION_MS : saving >= WORTH_MENTION_BYTES
     if (!enough) continue
 
@@ -130,33 +178,78 @@ export async function checkSpeed(url, options = {}) {
     found.add(ruleId, { value: unit === 'ms' ? formatMs(saving) : formatBytes(saving) })
   }
 
-  if (audits['unsized-images'] && audits['unsized-images'].score === 0) {
-    found.add('no-image-dimensions')
+  if (failed(audits['unsized-images'])) found.add('no-image-dimensions')
+
+  // ── мелочи списком ────────────────────────────────────────────────────────
+  const diagnostics = DIAGNOSTIC_IDS.map((id) => audits[id])
+    .filter((audit) => audit && audit.score !== null && audit.score < 0.9)
+    .map((audit) => audit.title)
+
+  if (diagnostics.length) {
+    found.add('speed-diagnostics', { list: diagnostics.slice(0, 6).join('; ') })
   }
 
   const findings = found.list()
 
   return {
-    url,
     ok: true,
     strategy,
     score,
     metrics: Object.fromEntries(
-      Object.entries(metrics).map(([name, metric]) => [name, metric ? metric.display : null]),
+      Object.entries(metrics).map(([name, item]) => [name, item ? item.display : null]),
     ),
-    opportunities: details.sort((a, b) => b.saving - a.saving).slice(0, 10),
+    lcpElement,
+    opportunities: details.sort((a, b) => b.saving - a.saving).slice(0, 12),
+    diagnostics,
     findings,
     summary: summarize(findings),
   }
 }
 
-function pick(audit) {
-  if (!audit) return null
-  return { value: audit.numericValue ?? null, display: audit.displayValue || String(audit.numericValue ?? '') }
+/**
+ * Берёт число из результата измерения и форматирует сами.
+ *
+ * Готовая подпись сервиса иногда выглядит как «Root document took 40 ms» —
+ * в отчёт такое ставить нельзя.
+ */
+function metric(audit, unit) {
+  if (!audit || audit.numericValue === undefined || audit.numericValue === null) return null
+
+  const value = audit.numericValue
+  const display =
+    unit === 'ms' ? formatMs(value) : unit === 'bytes' ? formatBytes(value) : String(Math.round(value * 1000) / 1000)
+
+  return { value, display }
 }
 
-function over(metric, limit) {
-  return metric && metric.value !== null && metric.value > limit
+function over(item, limit) {
+  return item && item.value !== null && item.value > limit
+}
+
+function failed(audit) {
+  return Boolean(audit) && audit.score !== null && audit.score < 0.9
+}
+
+function savingOf(audit, unit) {
+  const details = audit.details || {}
+  if (unit === 'ms') {
+    return details.overallSavingsMs ?? details.summary?.wastedMs ?? audit.numericValue ?? 0
+  }
+  return details.overallSavingsBytes ?? details.summary?.wastedBytes ?? audit.numericValue ?? 0
+}
+
+/** Достаёт описание самого крупного элемента первого экрана. */
+function describeLcpElement(audits) {
+  const audit = audits['largest-contentful-paint-element']
+  const items = audit?.details?.items || []
+
+  for (const item of items) {
+    const node = item.node || item.items?.[0]?.node
+    if (!node) continue
+    const label = node.nodeLabel || node.snippet || node.selector
+    if (label) return String(label).replace(/\s+/g, ' ').slice(0, 120)
+  }
+  return null
 }
 
 function formatMs(value) {

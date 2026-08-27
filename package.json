@@ -1,10 +1,10 @@
 {
   "name": "seo-revizor",
   "version": "0.6.0",
-  "description": "Агент-ревизор: проверяет сайт по чек-листу",
-  "main": "index.js",
+  "description": "MCP-сервер и агент, который проверяет сайт по SEO-чек-листу и собирает отчёт",
+  "main": "src/server.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node test/loop.js && node test/report.js && node test/speed.js",
     "check": "node test/check.js",
     "mcp": "node test/mcp.js",
     "audit": "node test/audit.js",
@@ -13,10 +13,13 @@
     "keys": "node test/keys.js",
     "speed": "node test/speed.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["mcp", "seo", "audit", "agent", "claude"],
+  "author": "Варвара Новченкова",
+  "license": "MIT",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.121.0",
     "@modelcontextprotocol/sdk": "^1.30.0",

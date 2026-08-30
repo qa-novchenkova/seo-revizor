@@ -1291,15 +1291,23 @@ b { font-weight: 600; }
 .loop__note { font-family: var(--f-mono); font-size: 11px; fill: var(--ink-mute); text-anchor: middle; }
 
 /* ---------- порядок ---------- */
-.order { margin: 0; padding: 0; list-style: none; counter-reset: s; }
-.order li {
-  counter-increment: s; position: relative; padding: 15px 0 15px 56px;
-  border-top: 1px solid var(--line); color: var(--ink-soft); font-size: .95rem;
+/* Два столбца на просторном экране, один на узком. Сетка заполняется
+   построчно, поэтому нумерация читается слева направо. */
+.order {
+  margin: 0; padding: 0; list-style: none; counter-reset: s;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px;
 }
-.order li:last-child { border-bottom: 1px solid var(--line); }
+@media (max-width: 760px) { .order { grid-template-columns: 1fr; } }
+.order li {
+  counter-increment: s; position: relative;
+  padding: 18px 20px 18px 64px; color: var(--ink-soft); font-size: .95rem;
+  background: var(--raise); border: 1px solid var(--line); border-radius: 14px;
+  transition: transform .2s ease, border-color .2s ease;
+}
+.order li:hover { transform: translateY(-3px); border-color: var(--line-hard); }
 .order li::before {
-  content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 16px;
-  width: 34px; height: 26px; display: grid; place-items: center;
+  content: counter(s, decimal-leading-zero); position: absolute; left: 20px; top: 19px;
+  width: 30px; height: 26px; display: grid; place-items: center;
   font-family: var(--f-mono); font-size: .7rem; font-weight: 600;
   color: var(--accent-ink); background: var(--accent-soft); border-radius: 7px;
 }

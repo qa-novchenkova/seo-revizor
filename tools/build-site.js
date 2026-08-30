@@ -6,7 +6,7 @@
  *
  *   инструменты  — из src/server.js, список TOOLS
  *   правила      — из src/rules/*.json
- *   порядок      — из AGENT.md, раздел «Порядок работы»
+ *   порядок      — из src/order.json (машинная версия остаётся в AGENT.md)
  *   чек-листы    — из src/checklist/checklist.json
  *
  * Поэтому страница не может разойтись с кодом: поменяли правило —
@@ -43,7 +43,17 @@ const glossary = JSON.parse(readFileSync(path.join(root, 'src/glossary.json'), '
 const terms = glossary.groups.flatMap((group) => group.terms)
 const rules = allRules()
 const areas = rulesByArea()
-const steps = readSteps()
+const steps = JSON.parse(readFileSync(path.join(root, 'src/order.json'), 'utf8')).steps
+
+// Порядок описан для читателя отдельно от AGENT.md, но ссылаться он должен
+// на существующие инструменты: опечатка в имени иначе разойдётся с сервером.
+for (const step of steps) {
+  for (const name of step.tools) {
+    if (!TOOLS.some((tool) => tool.name === name)) {
+      throw new Error(`В src/order.json указан несуществующий инструмент «${name}»`)
+    }
+  }
+}
 
 const checks = checklist.sections.flatMap((section) => section.checks)
 const automated = checks.filter(isMachine).length
@@ -53,16 +63,6 @@ function isMachine(check) {
   return check.kind === 'auto' || check.kind === 'both'
 }
 
-/** Достаёт нумерованный список из раздела «Порядок работы» в AGENT.md. */
-function readSteps() {
-  const text = readFileSync(path.join(root, 'AGENT.md'), 'utf8')
-  const section = text.split('## Порядок работы')[1]?.split('\n## ')[0] || ''
-
-  return section
-    .split('\n')
-    .filter((line) => /^\d+\.\s/.test(line))
-    .map((line) => line.replace(/^\d+\.\s/, '').trim())
-}
 
 // ── сборка ───────────────────────────────────────────────────────────────────
 
@@ -133,7 +133,7 @@ function hero() {
       <p class="lede">Глубокий аудит сайта по чек-листу из ${checks.length} параметров.
       Сканирует индексацию, зеркала, разметку, Core Web Vitals и безопасность.
       Вместо сухих логов вы получаете понятный отчёт:
-      <b>суть проблемы → риски → готовое решение</b>.</p>
+      <b class="lede__line">суть проблемы → риски → готовое решение</b></p>
 
       <p class="cta">
         <a class="btn btn--main" href="${REPO}">${icon('github')} Открыть код</a>
@@ -299,17 +299,17 @@ function toolsSection() {
 function orderSection() {
   return `<section class="sec" id="order"><div class="wrap">
   <h2 class="rise">Как думает ИИ-агент</h2>
-  <p class="intro rise">Обычная нейросеть работает линейно: получает вопрос и сразу выдаёт один
-  ответ. Агент «Ревизора» действует как мыслящий специалист, итерациями:</p>
+  <p class="intro intro--wide rise">Обычная нейросеть работает линейно: получает вопрос и сразу
+  выдаёт один ответ. Агент «Ревизора» действует как мыслящий специалист, итерациями:</p>
 
-  <ul class="beats rise">
+  <ul class="beats beats--wide rise">
     <li>Анализирует ситуацию и выбирает подходящий инструмент.</li>
     <li>Изучает полученный результат и оценивает техническое состояние сайта.</li>
     <li>Принимает решение, достаточно ли данных или нужен следующий шаг.</li>
   </ul>
 
-  <p class="intro rise">Число таких циклов заранее предугадать невозможно: агент сканирует сайт
-  до тех пор, пока полностью не закроет все пункты чек-листа.</p>
+  <p class="intro intro--wide rise">Число таких циклов заранее предугадать невозможно: агент
+  сканирует сайт до тех пор, пока полностью не закроет все пункты чек-листа.</p>
 
   ${loop()}
 
@@ -319,7 +319,14 @@ function orderSection() {
   результата не дадут.</p>
 
   <ol class="order">
-    ${steps.map((step, i) => `<li class="rise" style="--wait:${Math.min(i, 6) * 50}ms">${inline(step)}</li>`).join('')}
+    ${steps
+      .map(
+        (step, i) => `<li class="rise" style="--wait:${Math.min(i, 6) * 50}ms">
+      <h4>${esc(step.title)}${step.tools.map((name) => `<code>${esc(name)}</code>`).join('')}</h4>
+      <p>${esc(step.text)}</p>
+    </li>`,
+      )
+      .join('')}
   </ol>
   </div></section>`
 }
@@ -474,12 +481,15 @@ function checklistSection() {
 
   return `<section class="sec sec--alt" id="checklist"><div class="wrap">
   <h2 class="rise">Чек-листы <span class="badge">${checks.length}</span></h2>
-  <p class="intro rise">Полный список пунктов аудита, собранный в
-  ${plural(checklist.sections.length, ['раздел', 'раздела', 'разделов'])}. Разделы открываются
-  вкладками ниже. У каждого пункта сказано, чем дефект вреден и каким способом проверяется.
-  Автоматизировано <b>${automated}</b> пунктов, остальные <b>${manual}</b> требуют ручной проверки
-  или данных внешних сервисов. Это не пробел в наборе, а граница метода: раскрывает ли заголовок
-  категории её содержимое, можно оценить только глазами.</p>
+  <p class="intro rise">Полный список параметров аудита распределён по категориям во вкладках ниже.
+  Для каждого дефекта детально расписаны риски и методика проверки.</p>
+
+  <ul class="beats rise">
+    <li><b>${automated}</b> проверок полностью автоматизированы силами ИИ-агента.</li>
+    <li><b>${manual}</b> пунктов вынесены на ручной контроль. Это осознанное разделение: алгоритм
+    мгновенно находит технические дефекты, но оценить, насколько заголовок категории соответствует
+    её реальному содержимому, можно только человеческим взглядом.</li>
+  </ul>
 
   <nav class="chips tabs rise" aria-label="Разделы чек-листа">${chips}</nav>
 
@@ -978,8 +988,9 @@ b { font-weight: 600; }
   background: linear-gradient(96deg, #4FD1C3, #7FB0FF 46%, #FF8A80);
   -webkit-background-clip: text; background-clip: text; color: transparent;
 }
-.lede { margin: 22px 0 0; font-size: 1.14rem; max-width: 54ch; color: #C6D6D3; }
+.lede { margin: 22px 0 0; font-size: 1.14rem; max-width: 56ch; color: #C6D6D3; }
 .lede b { color: #EAF4F2; }
+.lede__line { display: block; margin-top: 8px; font-weight: 600; letter-spacing: .01em; }
 
 .cta { display: flex; flex-wrap: wrap; gap: 12px; margin: 32px 0 0; }
 .btn {
@@ -1172,6 +1183,7 @@ b { font-weight: 600; }
 @media (prefers-color-scheme: dark) { .badge { color: #05201D; } }
 .sub { margin: 52px 0 16px; font-size: 1.36rem; font-weight: 600; }
 .intro { margin: 0 0 30px; color: var(--ink-soft); max-width: 66ch; }
+.intro--wide, .sec p.intro--wide { max-width: none; }
 .sec p { max-width: 68ch; }
 
 .note {
@@ -1222,8 +1234,10 @@ b { font-weight: 600; }
   padding: 3px 8px; border-radius: 6px;
 }
 .tool p { margin: 0; font-size: .9rem; color: var(--ink-soft); }
-.tool__row { margin: 0 0 11px; }
-.tool__row:last-child { margin-bottom: 0; }
+.tool__row { margin: 0 0 14px; }
+.tool__row + .tool__row {
+  margin-bottom: 0; padding-top: 14px; border-top: 1px solid var(--line);
+}
 .tool__row span {
   display: block; font-family: var(--f-mono); font-size: .62rem; font-weight: 600;
   letter-spacing: .11em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 3px;
@@ -1231,6 +1245,8 @@ b { font-weight: 600; }
 
 /* ---------- список шагов ---------- */
 .beats { margin: 0 0 26px; padding: 0; list-style: none; display: grid; gap: 10px; max-width: 66ch; }
+.beats--wide { max-width: none; }
+.beats b { color: var(--ink); }
 .beats li {
   position: relative; padding-left: 30px; color: var(--ink-soft); font-size: .95rem;
 }
@@ -1282,12 +1298,20 @@ b { font-weight: 600; }
 }
 .order li:last-child { border-bottom: 1px solid var(--line); }
 .order li::before {
-  content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 14px;
+  content: counter(s, decimal-leading-zero); position: absolute; left: 0; top: 16px;
   width: 34px; height: 26px; display: grid; place-items: center;
   font-family: var(--f-mono); font-size: .7rem; font-weight: 600;
   color: var(--accent-ink); background: var(--accent-soft); border-radius: 7px;
 }
-.order code { font-family: var(--f-mono); font-size: .86em; color: var(--ink); background: var(--accent-soft); padding: 1px 6px; border-radius: 5px; }
+.order h4 {
+  margin: 0 0 6px; font-size: 1.05rem; font-weight: 600; color: var(--ink);
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.order p { margin: 0; }
+.order code {
+  font-family: var(--f-mono); font-size: .72rem; font-weight: 400;
+  color: var(--accent-ink); background: var(--accent-soft); padding: 2px 7px; border-radius: 5px;
+}
 
 /* ---------- чек-листы ---------- */
 .legend { margin: 0 0 24px; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 9px 22px; }

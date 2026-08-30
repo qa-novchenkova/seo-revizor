@@ -130,10 +130,10 @@ function hero() {
     <div class="hero__text">
       <p class="kicker">${icon('spark')} MCP-сервер · агент · открытый код</p>
       <h1>SEO-<em>ревизор</em></h1>
-      <p class="lede">Технический аудит сайта по чек-листу из ${checks.length} пунктов:
-      индексация, зеркала, дубли, разметка, перелинковка, Core Web Vitals, безопасность.
-      Каждая ошибка в отчёте описана по трём пунктам:
-      <b>в чём дефект</b>, <b>чем он вреден</b>, <b>как исправить</b>.</p>
+      <p class="lede">Глубокий аудит сайта по чек-листу из ${checks.length} параметров.
+      Сканирует индексацию, зеркала, разметку, Core Web Vitals и безопасность.
+      Вместо сухих логов вы получаете понятный отчёт:
+      <b>суть проблемы → риски → готовое решение</b>.</p>
 
       <p class="cta">
         <a class="btn btn--main" href="${REPO}">${icon('github')} Открыть код</a>
@@ -218,7 +218,7 @@ function ticker() {
 
 function nav() {
   const items = [
-    ['#about', 'Устройство', 'code'],
+    ['#about', 'О проблеме', 'code'],
     ['#tools', 'Инструменты', 'rules'],
     ['#order', 'Цикл агента', 'bot'],
     ['#checklist', 'Чек-листы', 'check'],
@@ -248,10 +248,11 @@ function about() {
   ]
 
   return `<section class="sec" id="about"><div class="wrap">
-  <h2 class="rise">Что это</h2>
-  <p class="intro rise">Технический аудит делают по списку: открыть robots.txt, проверить зеркала,
-  просмотреть мета-теги, пройти по внутренним ссылкам. Работа однообразная, пропустить пункт легко,
-  а цена пропуска высокая: одна лишняя директива в robots.txt закрывает от индексации весь сайт.</p>
+  <h2 class="rise">О проблеме</h2>
+  <p class="intro rise">Ручной аудит сайта — это десятки однообразных шагов. Из-за человеческого
+  фактора легко пропустить критическую ошибку, например случайно запретить индексацию всего
+  ресурса. SEO-агент автоматизирует этот процесс: он последовательно сканирует зеркала, метатеги,
+  ссылки и файлы конфигурации, собирая точные данные без риска что-то упустить.</p>
 
   <div class="cards">
     ${cards
@@ -275,8 +276,9 @@ function about() {
 function toolsSection() {
   return `<section class="sec sec--alt" id="tools"><div class="wrap">
   <h2 class="rise">Инструменты <span class="badge">${TOOLS.length}</span></h2>
-  <p class="intro rise">Это в точности то, что сервер отвечает на запрос «перечисли инструменты».
-  Описания читает модель: по ним она определяет, какой инструмент подходит к текущей задаче.</p>
+  <p class="intro rise">Это точный список команд, которые ИИ-сервер использует для сканирования.
+  Нейросеть сама изучает описания каждого инструмента и на лету решает, какую комбинацию
+  запустить прямо сейчас, чтобы решить конкретную задачу на вашем сайте.</p>
 
   <div class="tools">
     ${TOOLS.map(
@@ -284,7 +286,8 @@ function toolsSection() {
       <span class="tool__ico">${icon(TOOL_ICONS[tool.name] || 'code')}</span>
       <h3>${esc(tool.title)}</h3>
       <code>${esc(tool.name)}</code>
-      <p>${esc(tool.description)}</p>
+      <p class="tool__row"><span>Что делает</span>${esc(tool.what)}</p>
+      <p class="tool__row"><span>Зачем нужно</span>${esc(tool.why)}</p>
     </article>`,
     ).join('')}
   </div>
@@ -295,11 +298,18 @@ function toolsSection() {
 
 function orderSection() {
   return `<section class="sec" id="order"><div class="wrap">
-  <h2 class="rise">Как думает агент</h2>
-  <p class="intro rise">Обычный запрос к модели даёт один ответ. Агент вместо этого работает
-  кругами: выбирает инструмент, читает результат, решает, достаточно ли данных, и при
-  необходимости делает следующий вызов. Число кругов заранее неизвестно, потому что зависит
-  от состояния конкретного сайта.</p>
+  <h2 class="rise">Как думает ИИ-агент</h2>
+  <p class="intro rise">Обычная нейросеть работает линейно: получает вопрос и сразу выдаёт один
+  ответ. Агент «Ревизора» действует как мыслящий специалист, итерациями:</p>
+
+  <ul class="beats rise">
+    <li>Анализирует ситуацию и выбирает подходящий инструмент.</li>
+    <li>Изучает полученный результат и оценивает техническое состояние сайта.</li>
+    <li>Принимает решение, достаточно ли данных или нужен следующий шаг.</li>
+  </ul>
+
+  <p class="intro rise">Число таких циклов заранее предугадать невозможно: агент сканирует сайт
+  до тех пор, пока полностью не закроет все пункты чек-листа.</p>
 
   ${loop()}
 
@@ -661,7 +671,7 @@ function footer() {
     [
       'Разделы',
       [
-        ['#about', 'Устройство'],
+        ['#about', 'О проблеме'],
         ['#tools', 'Инструменты сервера'],
         ['#order', 'Цикл агента'],
         ['#checklist', 'Чек-листы аудита'],
@@ -1212,6 +1222,22 @@ b { font-weight: 600; }
   padding: 3px 8px; border-radius: 6px;
 }
 .tool p { margin: 0; font-size: .9rem; color: var(--ink-soft); }
+.tool__row { margin: 0 0 11px; }
+.tool__row:last-child { margin-bottom: 0; }
+.tool__row span {
+  display: block; font-family: var(--f-mono); font-size: .62rem; font-weight: 600;
+  letter-spacing: .11em; text-transform: uppercase; color: var(--ink-mute); margin-bottom: 3px;
+}
+
+/* ---------- список шагов ---------- */
+.beats { margin: 0 0 26px; padding: 0; list-style: none; display: grid; gap: 10px; max-width: 66ch; }
+.beats li {
+  position: relative; padding-left: 30px; color: var(--ink-soft); font-size: .95rem;
+}
+.beats li::before {
+  content: ''; position: absolute; left: 8px; top: .62em;
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent);
+}
 
 /* ---------- схема цикла ---------- */
 .loop {

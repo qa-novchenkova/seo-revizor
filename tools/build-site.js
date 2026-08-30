@@ -98,9 +98,9 @@ document.documentElement.className = 'js'
 </script>
 </head>
 <body>
+${nav()}
 ${hero()}
 ${ticker()}
-${nav()}
 <main>
 ${about()}
 ${toolsSection()}
@@ -912,7 +912,7 @@ a { color: var(--accent-ink); }
 h1, h2, h3, h4 { font-family: var(--f-head); letter-spacing: -.02em; text-wrap: balance; }
 b { font-weight: 600; }
 
-.wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 24px; }
 .wrap.narrow { max-width: 760px; }
 
 .ico { width: 1.25em; height: 1.25em; flex: none; }
@@ -940,7 +940,7 @@ b { font-weight: 600; }
   50% { transform: translate3d(26px, -22px, 0) scale(1.12); }
 }
 
-.hero__in { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 300px; gap: 44px; align-items: center; }
+.hero__in { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 56px; align-items: center; }
 @media (max-width: 900px) { .hero__in { grid-template-columns: 1fr; } .scan { display: none; } }
 
 .kicker {
@@ -1062,10 +1062,13 @@ b { font-weight: 600; }
   display: none; margin-left: auto; padding: 9px; cursor: pointer;
   background: none; border: 1px solid #27524C; border-radius: 9px; color: #D6E7E4;
 }
-.nav__burger .ico { width: 20px; height: 20px; display: block; }
-.nav__burger-close { display: none; }
-.nav.open .nav__burger-open { display: none; }
-.nav.open .nav__burger-close { display: block; }
+/* Показ иконок задаётся на том же уровне вложенности, что и размер:
+   иначе «.nav__burger .ico» перебивает «display: none» и рисуются обе. */
+.nav__burger .ico { width: 20px; height: 20px; }
+.nav__burger .nav__burger-open { display: block; }
+.nav__burger .nav__burger-close { display: none; }
+.nav.open .nav__burger .nav__burger-open { display: none; }
+.nav.open .nav__burger .nav__burger-close { display: block; }
 
 @media (max-width: 760px) {
   .nav .wrap { overflow: visible; gap: 12px; }

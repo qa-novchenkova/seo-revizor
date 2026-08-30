@@ -229,7 +229,10 @@ function nav() {
 
   return `<nav class="nav"><div class="wrap">
     <span class="nav__mark">${icon('security')} Ревизор</span>
-    <div class="nav__links">
+    <button type="button" class="nav__burger" aria-expanded="false" aria-controls="nav-links" aria-label="Меню разделов">
+      ${icon('menu', 'nav__burger-open')}${icon('close', 'nav__burger-close')}
+    </button>
+    <div class="nav__links" id="nav-links">
       ${items.map(([href, label, ic]) => `<a href="${href}">${icon(ic)}${esc(label)}</a>`).join('')}
     </div>
   </div></nav>`
@@ -336,7 +339,14 @@ function loop() {
     .join('')
 
   return `<div class="loop rise">
-  <svg viewBox="0 0 820 290" fill="none" role="img"
+  ${loopWide(boxes)}
+  ${loopTall()}
+</div>`
+}
+
+/** Широкая схема: боксы в строку, возврат петлёй снизу. Для больших экранов. */
+function loopWide(boxes) {
+  return `<svg class="loop__wide" viewBox="0 0 820 290" fill="none" role="img"
        aria-label="Схема работы агента. Задача входит в цикл. Внутри цикла три шага: выбор инструмента, вызов проверки, оценка данных. Если данных не хватает, цикл повторяется с выбора. Когда хватает, собирается отчёт.">
     <defs>
       <marker id="tip" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto">
@@ -370,8 +380,67 @@ function loop() {
 
     <text x="470" y="170" class="loop__note">данных мало — ещё круг</text>
     <text x="720" y="274" class="loop__note">данных хватает</text>
-  </svg>
-</div>`
+  </svg>`
+}
+
+/**
+ * Высокая схема: те же шаги, но столбиком, возврат петлёй слева.
+ * Нужна отдельная, а не уменьшенная широкая: на экране в 375 точек
+ * та же схема ужалась бы до нечитаемого или уехала за край.
+ */
+function loopTall() {
+  const nodes = [
+    [6, 54, '1', 'Задача', 'проверь сайт', 'enter'],
+    [98, 62, '2', 'Выбор', 'какой инструмент', 'ring'],
+    [202, 62, '3', 'Вызов', 'сервер проверяет', 'ring'],
+    [306, 62, '4', 'Оценка', 'данных хватает?', 'ring'],
+  ]
+
+  const boxes = nodes
+    .map(
+      ([y, height, step, title, note, kind]) => `<g class="loop__node loop__node--${kind}">
+      <rect x="95" y="${y}" width="230" height="${height}" rx="13"/>
+      <text x="210" y="${y + 26}" class="loop__t"><tspan class="loop__n">${step}</tspan> ${esc(title)}</text>
+      <text x="210" y="${y + 46}" class="loop__s">${esc(note)}</text>
+    </g>`,
+    )
+    .join('')
+
+  return `<svg class="loop__tall" viewBox="0 0 340 512" fill="none" role="img"
+       aria-label="Та же схема столбиком: задача входит в цикл, внутри — выбор инструмента, вызов проверки, оценка данных; при нехватке данных цикл повторяется, иначе собирается отчёт.">
+    <defs>
+      <marker id="tipTall" viewBox="0 0 10 10" refX="8.6" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto">
+        <path d="M0 0 10 5 0 10z" fill="currentColor"/>
+      </marker>
+    </defs>
+
+    <rect class="loop__zone" x="20" y="86" width="312" height="300" rx="18"/>
+    <text class="loop__zonelabel" x="332" y="78" text-anchor="end">цикл</text>
+
+    ${boxes}
+
+    <g class="loop__node loop__node--out">
+      <rect x="95" y="428" width="230" height="46" rx="13"/>
+      <text x="210" y="456" class="loop__t">Отчёт</text>
+    </g>
+
+    <g class="loop__wire">
+      <path d="M210 60 V94" marker-end="url(#tipTall)"/>
+      <path d="M210 160 V198" marker-end="url(#tipTall)"/>
+      <path d="M210 264 V302" marker-end="url(#tipTall)"/>
+      <path d="M95 337 H56 V129 H91" marker-end="url(#tipTall)"/>
+    </g>
+    <g class="loop__wire loop__wire--out">
+      <path d="M210 368 V424" marker-end="url(#tipTall)"/>
+    </g>
+
+    <circle class="loop__spark" r="6">
+      <animateMotion dur="5.4s" repeatCount="indefinite" path="M210 129 V233 V337 H56 V129 Z"/>
+    </circle>
+
+    <text class="loop__note" transform="rotate(-90 40 233)" x="40" y="233">данных мало — ещё круг</text>
+    <text x="210" y="496" class="loop__note">данных хватает</text>
+  </svg>`
 }
 
 // ── чек-листы ────────────────────────────────────────────────────────────────
@@ -740,6 +809,30 @@ document.querySelectorAll('.num').forEach(function (node) {
   requestAnimationFrame(tick);
 });
 
+// Бургер на узком экране
+var nav = document.querySelector('.nav');
+var burger = document.querySelector('.nav__burger');
+
+if (nav && burger) {
+  var setMenu = function (open) {
+    nav.classList.toggle('open', open);
+    burger.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+
+  burger.addEventListener('click', function () {
+    setMenu(!nav.classList.contains('open'));
+  });
+
+  // Перешли по пункту — меню закрывается, иначе оно закрывает собой цель
+  nav.querySelectorAll('.nav__links a').forEach(function (link) {
+    link.addEventListener('click', function () { setMenu(false); });
+  });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape') setMenu(false);
+  });
+}
+
 // Подсветка раздела, в котором сейчас находимся
 var links = [].slice.call(document.querySelectorAll('.nav__links a'));
 var spots = links
@@ -963,6 +1056,30 @@ b { font-weight: 600; }
 .nav a.here { color: #06211E; background: #4FD1C3; }
 .nav a.here .ico { opacity: 1; }
 
+/* Бургер. Показывается только на узком экране и только при работающих
+   скриптах: без них меню остаётся обычным списком ссылок. */
+.nav__burger {
+  display: none; margin-left: auto; padding: 9px; cursor: pointer;
+  background: none; border: 1px solid #27524C; border-radius: 9px; color: #D6E7E4;
+}
+.nav__burger .ico { width: 20px; height: 20px; display: block; }
+.nav__burger-close { display: none; }
+.nav.open .nav__burger-open { display: none; }
+.nav.open .nav__burger-close { display: block; }
+
+@media (max-width: 760px) {
+  .nav .wrap { overflow: visible; gap: 12px; }
+  .js .nav__burger { display: block; }
+  .js .nav__links {
+    position: absolute; left: 0; right: 0; top: 100%;
+    display: none; flex-direction: column; gap: 3px;
+    padding: 10px 16px 16px; background: var(--deep);
+    border-bottom: 1px solid #1C3B37; box-shadow: 0 16px 30px -18px #000C;
+  }
+  .js .nav.open .nav__links { display: flex; }
+  .nav a { margin: 0; padding: 11px 13px; }
+}
+
 /* ---------- кнопки-переходы по разделам ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 26px; }
 .chip {
@@ -1083,7 +1200,18 @@ b { font-weight: 600; }
   background: var(--raise); border: 1px solid var(--line); border-radius: 16px;
   padding: 20px 16px; overflow-x: auto; margin-bottom: 10px;
 }
-.loop svg { display: block; min-width: 760px; width: 100%; height: auto; color: var(--line-hard); }
+/* Показ схемы задаётся только на самих классах: если оставить display
+   на «.loop svg», это правило окажется специфичнее и переключение сломается. */
+.loop svg { width: 100%; height: auto; color: var(--line-hard); }
+.loop__wide { display: block; min-width: 760px; }
+.loop__tall { display: none; }
+/* На узком экране широкая схема нечитаема, поэтому показывается та же
+   последовательность, собранная столбиком. */
+@media (max-width: 760px) {
+  .loop { overflow-x: visible; padding: 16px 12px; }
+  .loop__wide { display: none; }
+  .loop__tall { display: block; max-width: 340px; margin: 0 auto; }
+}
 .loop__zone { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1.2; stroke-dasharray: 6 5; opacity: .55; }
 .loop__zonelabel {
   font-family: var(--f-mono); font-size: 10.5px; font-weight: 600;

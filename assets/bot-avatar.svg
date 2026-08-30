@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Ревизор: щит с галочкой и лупой">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#123331"/>
+      <stop offset="0.55" stop-color="#0C201E"/>
+      <stop offset="1" stop-color="#071413"/>
+    </linearGradient>
+
+    <linearGradient id="mint" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#7FE8DC"/>
+      <stop offset="1" stop-color="#35B8AB"/>
+    </linearGradient>
+
+    <radialGradient id="glow" cx="0.5" cy="0.38" r="0.6">
+      <stop offset="0" stop-color="#4FD1C3" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#4FD1C3" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Подсветка без резкого края: у краёв прозрачна, иначе на щите
+         появляется горизонтальная граница и читается как лишняя линия. -->
+    <linearGradient id="sweep" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4FD1C3" stop-opacity="0"/>
+      <stop offset="0.45" stop-color="#4FD1C3" stop-opacity="0.15"/>
+      <stop offset="1" stop-color="#4FD1C3" stop-opacity="0"/>
+    </linearGradient>
+
+    <clipPath id="shield">
+      <path d="M256 84 L392 134 v132 c0 84-61 134-136 162-75-28-136-78-136-162V134z"/>
+    </clipPath>
+  </defs>
+
+  <!-- фон: круглая обрезка аватара съедает углы, поэтому важное держим в центре -->
+  <rect width="512" height="512" fill="url(#bg)"/>
+  <circle cx="256" cy="196" r="240" fill="url(#glow)"/>
+
+  <!-- сетка: намёк на разметку страницы -->
+  <g stroke="#1B3E3A" stroke-width="1.4" opacity="0.5">
+    <path d="M0 128h512M0 256h512M0 384h512M128 0v512M256 0v512M384 0v512"/>
+  </g>
+
+  <!-- щит -->
+  <path d="M256 84 L392 134 v132 c0 84-61 134-136 162-75-28-136-78-136-162V134z"
+        fill="#0E2725" stroke="url(#mint)" stroke-width="14" stroke-linejoin="round"/>
+
+  <!-- строки внутри щита: то, что проверяется -->
+  <g clip-path="url(#shield)">
+    <g fill="#20514C">
+      <rect x="150" y="168" width="150" height="16" rx="8"/>
+      <rect x="150" y="204" width="212" height="16" rx="8"/>
+      <rect x="150" y="240" width="120" height="16" rx="8"/>
+    </g>
+    <!-- мягкая подсветка на всю высоту щита -->
+    <rect x="104" y="84" width="304" height="360" fill="url(#sweep)"/>
+  </g>
+
+  <!-- галочка: главный знак, читается даже в мелком размере -->
+  <path d="M186 296 l48 50 96 -122" fill="none" stroke="url(#mint)" stroke-width="34"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

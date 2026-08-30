@@ -83,9 +83,9 @@ function page() {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Ревизор — MCP-сервер и агент для проверки сайтов</title>
-<meta name="description" content="Открытый MCP-сервер и агент, который проверяет сайт по чек-листу из ${checks.length} пунктов и собирает отчёт. ${TOOLS.length} инструментов, ${rules.length} правил.">
-<meta property="og:title" content="Ревизор — проверка сайта по чек-листу">
-<meta property="og:description" content="MCP-сервер и агент: ${TOOLS.length} инструментов, ${rules.length} правил, отчёт со сравнением прогонов.">
+<meta name="description" content="Открытый MCP-сервер и автономный ИИ-агент для глубокого технического SEO-аудита сайтов. Автоматический поиск багов, ${checks.length} проверки и готовый отчёт по шагам.">
+<meta property="og:title" content="ИИ-агент «Ревизор» — умный технический аудит сайтов">
+<meta property="og:description" content="Автоматический аудит сайта по ${checks.length} критериям через протокол MCP. Находит SEO-ошибки, уязвимости и наглядно сравнивает отчёты после обновлений.">
 <meta property="og:type" content="website">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
@@ -491,7 +491,7 @@ function checklistSection() {
     её реальному содержимому, можно только человеческим взглядом.</li>
   </ul>
 
-  <nav class="chips tabs rise" aria-label="Разделы чек-листа">${chips}</nav>
+  <nav class="chips tabs rise" id="checklist-tabs" aria-label="Разделы чек-листа">${chips}</nav>
 
   <div class="filters rise" role="group" aria-label="Показать пункты по способу проверки">
     <span class="filters__label">Через все разделы:</span>
@@ -587,17 +587,25 @@ function rulesSection() {
     .join('')
 
   return `<section class="sec" id="rules"><div class="wrap">
-  <h2 class="rise">Правила <span class="badge">${rules.length}</span></h2>
-  <p class="intro rise">Формулировки замечаний вынесены из кода в файлы данных, и у каждого правила
-  есть постоянный идентификатор. Отсюда два следствия. Текст правится без вмешательства в логику
-  проверок. Два прогона сравниваются между собой, поэтому видно, что исправлено, а что появилось.</p>
+  <h2 class="rise">База правил <span class="badge">${rules.length}</span></h2>
+  <p class="intro rise">Все формулировки замечаний отделены от программного кода и вынесены
+  в независимые файлы данных, а каждому правилу присвоен постоянный идентификатор.
+  Архитектура даёт два ключевых преимущества:</p>
+
+  <ul class="beats rise">
+    <li><b>Гибкость обновлений.</b> Тексты описаний, рисков и рекомендаций актуализируются
+    мгновенно, без риска задеть или нарушить внутреннюю логику проверок.</li>
+    <li><b>Наглядная история изменений.</b> Система сопоставляет результаты двух любых прогонов
+    между собой. Видна динамика: какие дефекты успешно устранены, а какие ошибки появились
+    после последнего обновления сайта.</li>
+  </ul>
 
   <div class="sevs rise">${severities}</div>
 
   <ul class="rulebars rise">${rows}</ul>
 
   <h3 class="sub rise">Как выглядит ошибка в отчёте</h3>
-  <p class="intro rise">Формат одинаков для всех ${rules.length} правил: название дефекта,
+  <p class="intro rise">Формат одинаков для всех правил: название дефекта,
   что именно обнаружено, чем это вредит и каким действием устраняется.</p>
   <div class="findings">${examples}</div>
   </div></section>`
@@ -620,7 +628,7 @@ function exampleFinding(rule) {
 function glossarySection() {
   const groups = glossary.groups
     .map(
-      (group, i) => `<section class="gloss rise" id="gl-${group.id}" style="--wait:${(i % 2) * 70}ms">
+      (group, i) => `<section class="gloss rise${i === 0 ? ' open' : ''}" id="gl-${group.id}" style="--wait:${(i % 2) * 70}ms">
     <h3>${esc(group.title)} <span class="count count--plain">${group.terms.length}</span></h3>
     <p class="gloss__intro">${esc(group.intro)}</p>
     <dl class="gloss__list">
@@ -631,7 +639,10 @@ function glossarySection() {
     .join('')
 
   const jump = glossary.groups
-    .map((group) => `<a class="chip chip--plain" href="#gl-${group.id}">${esc(group.title)}<b>${group.terms.length}</b></a>`)
+    .map(
+      (group, i) =>
+        `<a class="chip chip--plain${i === 0 ? ' on' : ''}" href="#gl-${group.id}">${esc(group.title)}<b>${group.terms.length}</b></a>`,
+    )
     .join('')
 
   return `<section class="sec" id="glossary"><div class="wrap">
@@ -640,9 +651,9 @@ function glossarySection() {
   к устройству агента, другие к техническому SEO. Без расшифровки строка вида
   «LCP 4,2 с при норме 2,5» владельцу сайта ничего не сообщает.</p>
 
-  <nav class="chips rise" aria-label="Разделы глоссария">${jump}</nav>
+  <nav class="chips tabs rise" id="gloss-tabs" aria-label="Разделы глоссария">${jump}</nav>
 
-  <div class="glosses">${groups}</div>
+  <div class="glosses" data-view="tab">${groups}</div>
   </div></section>`
 }
 
@@ -659,17 +670,28 @@ function termItem(item) {
 function startSection() {
   return `<section class="sec sec--alt" id="start"><div class="wrap narrow">
   <h2 class="rise">Запуск</h2>
-  <p class="intro rise">Нужен Node.js 22 или новее. Ключи не обязательны:
-  без них пропускается только измерение скорости.</p>
+  <p class="intro rise">Нужен Node.js 22 или новее. Всё остальное ставится одной командой.</p>
 
   <pre class="rise"><code>git clone ${REPO}.git
 cd seo-revizor
 npm install
 npm run check meta https://example.com/</code></pre>
 
-  <p class="rise">Файл <code>.mcp.json</code> уже лежит в репозитории. Откройте папку проекта
-  в Claude Code или другом клиенте с поддержкой MCP, и инструменты появятся в списке доступных.
-  После этого достаточно попросить: «следуй AGENT.md и проверь сайт такой-то».</p>
+  <p class="rise">Конфигурационный файл <code>.mcp.json</code> включён в репозиторий
+  по умолчанию. Для старта аудита достаточно трёх шагов:</p>
+
+  <ol class="steps rise">
+    <li>Откройте рабочую папку проекта в Claude Code или другом клиенте с поддержкой
+    протокола MCP.</li>
+    <li>Убедитесь, что инструменты Ревизора появились в списке доступных.</li>
+    <li>Отправьте модели запрос: <code>Следуй инструкциям в AGENT.md и проверь сайт
+    [адрес_сайта]</code></li>
+  </ol>
+
+  <p class="note rise">${icon('spark', 'note__ico')} Десять разделов из одиннадцати работают сразу.
+  Ключ нужен только для измерения скорости: его выдаёт Google бесплатно, и он остаётся
+  на вашей машине в файле <code>.env</code>. Без ключа проверка не падает, а помечает
+  раздел скорости как непроверенный.</p>
 
   <p class="rise">Описание устройства и разбор каждого файла собраны в
   <a href="${REPO}#readme">README репозитория</a>.</p>
@@ -685,7 +707,7 @@ function footer() {
         ['#tools', 'Инструменты сервера'],
         ['#order', 'Цикл агента'],
         ['#checklist', 'Чек-листы аудита'],
-        ['#rules', 'Правила и severity'],
+        ['#rules', 'База правил'],
         ['#glossary', 'Глоссарий'],
       ],
     ],
@@ -758,42 +780,63 @@ function script() {
   return `
 var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Чек-листы: вкладки разделов и отбор по способу проверки.
-// Это два разных взгляда на один список, поэтому включён всегда ровно один:
-// либо открыт один раздел, либо показаны все разделы с отбором.
-var lists = document.querySelector('.lists');
-var tabs = [].slice.call(document.querySelectorAll('.tabs .chip'));
-var modes = [].slice.call(document.querySelectorAll('.filters button'));
-var blocks = [].slice.call(document.querySelectorAll('.block'));
+// Вкладки: из набора блоков показан ровно один.
+// Так устроены и чек-листы, и глоссарий — иначе оба раздела растягивают
+// страницу на десятки экранов.
+function tabbed(stripId, containerSelector) {
+  var strip = document.getElementById(stripId);
+  var container = document.querySelector(containerSelector);
+  if (!strip || !container) return null;
 
-function openSection(id) {
-  lists.dataset.view = 'tab';
-  blocks.forEach(function (block) { block.classList.toggle('open', block.id === id); });
-  tabs.forEach(function (tab) { tab.classList.toggle('on', tab.getAttribute('href') === '#' + id); });
-  modes.forEach(function (mode) { mode.classList.remove('on'); });
+  var tabs = [].slice.call(strip.querySelectorAll('.chip'));
+  var blocks = [].slice.call(container.children);
+
+  function open(id) {
+    container.dataset.view = 'tab';
+    blocks.forEach(function (block) { block.classList.toggle('open', block.id === id); });
+    tabs.forEach(function (tab) { tab.classList.toggle('on', tab.getAttribute('href') === '#' + id); });
+  }
+
+  tabs.forEach(function (tab) {
+    tab.addEventListener('click', function (event) {
+      event.preventDefault();
+      open(tab.getAttribute('href').slice(1));
+    });
+  });
+
+  return { open: open, tabs: tabs, container: container };
 }
 
-tabs.forEach(function (tab) {
-  tab.addEventListener('click', function (event) {
-    event.preventDefault();
-    openSection(tab.getAttribute('href').slice(1));
-  });
-});
+var checklistTabs = tabbed('checklist-tabs', '.lists');
+var glossaryTabs = tabbed('gloss-tabs', '.glosses');
 
-modes.forEach(function (button) {
-  button.addEventListener('click', function () {
-    lists.dataset.view = button.dataset.filter;
-    modes.forEach(function (other) { other.classList.toggle('on', other === button); });
-    tabs.forEach(function (tab) { tab.classList.remove('on'); });
-  });
-});
+// Отбор по способу проверки есть только у чек-листа. Это второй взгляд на тот же
+// список, поэтому вкладка и режим не могут быть включены одновременно.
+if (checklistTabs) {
+  var modes = [].slice.call(document.querySelectorAll('.filters button'));
 
-// Ссылка вида #cl-security извне должна открывать нужный раздел, а не теряться.
-// Слушаем и смену адреса тоже: якорь может появиться уже после загрузки.
+  modes.forEach(function (button) {
+    button.addEventListener('click', function () {
+      checklistTabs.container.dataset.view = button.dataset.filter;
+      modes.forEach(function (other) { other.classList.toggle('on', other === button); });
+      checklistTabs.tabs.forEach(function (tab) { tab.classList.remove('on'); });
+    });
+  });
+
+  checklistTabs.tabs.forEach(function (tab) {
+    tab.addEventListener('click', function () {
+      modes.forEach(function (other) { other.classList.remove('on'); });
+    });
+  });
+}
+
+// Ссылка вида #cl-security или #gl-speed извне должна открывать нужную вкладку.
+// Слушаем и смену адреса: якорь может появиться уже после загрузки.
 function openFromHash() {
-  if (location.hash.indexOf('#cl-') !== 0) return;
-  if (!document.getElementById(location.hash.slice(1))) return;
-  openSection(location.hash.slice(1));
+  var id = location.hash.slice(1);
+  if (!id || !document.getElementById(id)) return;
+  if (id.indexOf('cl-') === 0 && checklistTabs) checklistTabs.open(id);
+  if (id.indexOf('gl-') === 0 && glossaryTabs) glossaryTabs.open(id);
 }
 
 openFromHash();
@@ -1418,6 +1461,7 @@ b { font-weight: 600; }
 /* Вкладки: открыт один раздел. Прячем только при работающих скриптах —
    без них показываются все разделы подряд, и ссылки-якоря работают как обычно. */
 .js .lists[data-view="tab"] .block:not(.open) { display: none; }
+.js .glosses[data-view="tab"] .gloss:not(.open) { display: none; }
 
 .lists[data-view="machine"] .chk[data-side="human"],
 .lists[data-view="human"] .chk[data-side="machine"] { display: none; }
@@ -1499,6 +1543,24 @@ b { font-weight: 600; }
   color: var(--ink-mute); letter-spacing: .02em; margin-top: 3px;
 }
 .gloss__item dd { margin: 9px 0 0; font-size: .9rem; color: var(--ink-soft); }
+
+/* ---------- шаги запуска ---------- */
+.steps { margin: 0 0 26px; padding: 0; list-style: none; counter-reset: q; display: grid; gap: 10px; }
+.steps li {
+  counter-increment: q; position: relative; padding-left: 40px;
+  color: var(--ink-soft); font-size: .95rem;
+}
+.steps li::before {
+  content: counter(q); position: absolute; left: 0; top: .1em;
+  width: 26px; height: 26px; display: grid; place-items: center;
+  font-family: var(--f-mono); font-size: .72rem; font-weight: 600;
+  color: #FFF; background: var(--accent); border-radius: 50%;
+}
+@media (prefers-color-scheme: dark) { .steps li::before { color: #05201D; } }
+.steps code {
+  font-family: var(--f-mono); font-size: .84em; color: var(--ink);
+  background: var(--accent-soft); padding: 2px 7px; border-radius: 5px;
+}
 
 /* ---------- наверх ---------- */
 .totop {

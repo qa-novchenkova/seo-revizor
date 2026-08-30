@@ -12,7 +12,8 @@
     "report": "node test/report.js",
     "keys": "node test/keys.js",
     "speed": "node test/speed.js",
-    "site": "node tools/build-site.js"
+    "site": "node tools/build-site.js",
+    "text": "node tools/check-text.js"
   },
   "keywords": [
     "mcp",

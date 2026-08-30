@@ -228,7 +228,7 @@ function nav() {
   ]
 
   return `<nav class="nav"><div class="wrap">
-    <span class="nav__mark">${icon('security')} Ревизор</span>
+    <a class="nav__mark" href="#" aria-label="В начало страницы">${icon('security')} Ревизор</a>
     <button type="button" class="nav__burger" aria-expanded="false" aria-controls="nav-links" aria-label="Меню разделов">
       ${icon('menu', 'nav__burger-open')}${icon('close', 'nav__burger-close')}
     </button>
@@ -242,16 +242,16 @@ function nav() {
 
 function about() {
   const cards = [
-    ['code', 'Сервер', 'Набор функций. Каждая проверяет свой участок и возвращает данные: коды ответа, заголовки, ссылки, скорость.'],
-    ['bot', 'Агент', 'Цикл. Сам выбирает, какую функцию вызвать следующей, исходя из того, что нашлось на предыдущем шаге.'],
-    ['content', 'Отчёт', 'Markdown, HTML и PDF. Со сравнением с прошлой проверкой: что исправлено, что появилось, что осталось.'],
+    ['code', 'Сервер', 'Набор функций. Каждая проверяет свой участок и возвращает данные: коды ответа, заголовки, ссылки, показатели скорости.'],
+    ['bot', 'Агент', 'Цикл. Выбирает следующую функцию по тому, что обнаружено на предыдущем шаге, и останавливается, когда данных достаточно.'],
+    ['content', 'Отчёт', 'Markdown, HTML и PDF со сравнением с прошлой проверкой: что исправлено, что появилось, что осталось.'],
   ]
 
   return `<section class="sec" id="about"><div class="wrap">
   <h2 class="rise">Что это</h2>
-  <p class="intro rise">Обычный SEO-аудит делают руками по списку: открыть robots.txt, посмотреть
-  заголовки, проверить зеркала, прокликать ссылки. Работа механическая, но пропустить пункт
-  легко, а цена пропуска высокая — одна строка в robots.txt закрывает сайт от поиска целиком.</p>
+  <p class="intro rise">Технический аудит делают по списку: открыть robots.txt, проверить зеркала,
+  просмотреть мета-теги, пройти по внутренним ссылкам. Работа однообразная, пропустить пункт легко,
+  а цена пропуска высокая: одна лишняя директива в robots.txt закрывает от индексации весь сайт.</p>
 
   <div class="cards">
     ${cards
@@ -265,8 +265,8 @@ function about() {
       .join('')}
   </div>
 
-  <p class="note rise">${icon('eye', 'note__ico')} Сервер работает на вашей машине и никуда ничего
-  не отправляет. Проверять чужие сайты без разрешения владельца не стоит: обход создаёт нагрузку.</p>
+  <p class="note rise">${icon('eye', 'note__ico')} Сервер работает на вашей машине и никуда данные
+  не передаёт. Проверять чужой сайт без согласия владельца не следует: обход создаёт нагрузку.</p>
   </div></section>`
 }
 
@@ -275,8 +275,8 @@ function about() {
 function toolsSection() {
   return `<section class="sec sec--alt" id="tools"><div class="wrap">
   <h2 class="rise">Инструменты <span class="badge">${TOOLS.length}</span></h2>
-  <p class="intro rise">Ровно то, что сервер отвечает на вопрос «какие у тебя есть инструменты».
-  Описания читает модель — по ним она понимает, когда какой вызывать.</p>
+  <p class="intro rise">Это в точности то, что сервер отвечает на запрос «перечисли инструменты».
+  Описания читает модель: по ним она определяет, какой инструмент подходит к текущей задаче.</p>
 
   <div class="tools">
     ${TOOLS.map(
@@ -296,15 +296,17 @@ function toolsSection() {
 function orderSection() {
   return `<section class="sec" id="order"><div class="wrap">
   <h2 class="rise">Как думает агент</h2>
-  <p class="intro rise">Разница между обычным запросом и агентом в том, что агент сам решает,
-  что делать дальше, и повторяет это, пока не закончит. Сколько будет вызовов —
-  заранее не знает никто: зависит от того, что найдётся по дороге.</p>
+  <p class="intro rise">Обычный запрос к модели даёт один ответ. Агент вместо этого работает
+  кругами: выбирает инструмент, читает результат, решает, достаточно ли данных, и при
+  необходимости делает следующий вызов. Число кругов заранее неизвестно, потому что зависит
+  от состояния конкретного сайта.</p>
 
   ${loop()}
 
   <h3 class="sub rise">Порядок проверки</h3>
-  <p class="intro rise">Последовательность не случайная. Зеркала идут первыми: пока поисковик
-  видит вместо одного сайта три копии, остальные правки почти бессмысленны.</p>
+  <p class="intro rise">Последовательность выбрана не произвольно. Зеркала проверяются первыми:
+  пока поисковая система видит вместо одного сайта несколько копий, остальные правки
+  результата не дадут.</p>
 
   <ol class="order">
     ${steps.map((step, i) => `<li class="rise" style="--wait:${Math.min(i, 6) * 50}ms">${inline(step)}</li>`).join('')}
@@ -462,11 +464,12 @@ function checklistSection() {
 
   return `<section class="sec sec--alt" id="checklist"><div class="wrap">
   <h2 class="rise">Чек-листы <span class="badge">${checks.length}</span></h2>
-  <p class="intro rise">Полный список в ${plural(checklist.sections.length, ['разделе', 'разделах', 'разделах'])}
-  — разделы открываются вкладками ниже. У каждого пункта указано, чем дефект вреден и каким
-  способом проверяется. Автоматизировано <b>${automated}</b> пунктов; остальные <b>${manual}</b>
-  требуют ручной проверки или платных сервисов. Это не пробел, а граница метода: раскрывает ли
-  заголовок категории её содержимое, можно оценить только глазами.</p>
+  <p class="intro rise">Полный список пунктов аудита, собранный в
+  ${plural(checklist.sections.length, ['раздел', 'раздела', 'разделов'])}. Разделы открываются
+  вкладками ниже. У каждого пункта сказано, чем дефект вреден и каким способом проверяется.
+  Автоматизировано <b>${automated}</b> пунктов, остальные <b>${manual}</b> требуют ручной проверки
+  или данных внешних сервисов. Это не пробел в наборе, а граница метода: раскрывает ли заголовок
+  категории её содержимое, можно оценить только глазами.</p>
 
   <nav class="chips tabs rise" aria-label="Разделы чек-листа">${chips}</nav>
 
@@ -565,17 +568,17 @@ function rulesSection() {
 
   return `<section class="sec" id="rules"><div class="wrap">
   <h2 class="rise">Правила <span class="badge">${rules.length}</span></h2>
-  <p class="intro rise">Формулировки замечаний вынесены из кода в файлы данных, у каждого правила
-  свой постоянный идентификатор. Это даёт две вещи. Текст можно править, не трогая логику проверок.
-  И два прогона можно сравнить между собой — видно, что исправлено, а что появилось.</p>
+  <p class="intro rise">Формулировки замечаний вынесены из кода в файлы данных, и у каждого правила
+  есть постоянный идентификатор. Отсюда два следствия. Текст правится без вмешательства в логику
+  проверок. Два прогона сравниваются между собой, поэтому видно, что исправлено, а что появилось.</p>
 
   <div class="sevs rise">${severities}</div>
 
   <ul class="rulebars rise">${rows}</ul>
 
   <h3 class="sub rise">Как выглядит ошибка в отчёте</h3>
-  <p class="intro rise">Формат один для всех ${rules.length} правил: заголовок дефекта,
-  что именно обнаружено, чем это вредит, каким действием устраняется.</p>
+  <p class="intro rise">Формат одинаков для всех ${rules.length} правил: название дефекта,
+  что именно обнаружено, чем это вредит и каким действием устраняется.</p>
   <div class="findings">${examples}</div>
   </div></section>`
 }
@@ -613,9 +616,9 @@ function glossarySection() {
 
   return `<section class="sec" id="glossary"><div class="wrap">
   <h2 class="rise">Глоссарий <span class="badge">${terms.length}</span></h2>
-  <p class="intro rise">Термины из отчётов аудита и из описания проекта. Одни описывают
-  устройство агента, другие относятся к техническому SEO. Без расшифровки строка
-  «LCP 4,2 с при норме 2,5» не говорит владельцу сайта ничего.</p>
+  <p class="intro rise">Термины из отчётов аудита и из описания проекта. Одни относятся
+  к устройству агента, другие к техническому SEO. Без расшифровки строка вида
+  «LCP 4,2 с при норме 2,5» владельцу сайта ничего не сообщает.</p>
 
   <nav class="chips rise" aria-label="Разделы глоссария">${jump}</nav>
 
@@ -644,11 +647,11 @@ cd seo-revizor
 npm install
 npm run check meta https://example.com/</code></pre>
 
-  <p class="rise">Файл <code>.mcp.json</code> уже в репозитории — откройте папку в Claude Code
-  или другом клиенте с поддержкой MCP, и инструменты появятся в списке.
-  Дальше можно просто попросить: «следуй AGENT.md и проверь сайт такой-то».</p>
+  <p class="rise">Файл <code>.mcp.json</code> уже лежит в репозитории. Откройте папку проекта
+  в Claude Code или другом клиенте с поддержкой MCP, и инструменты появятся в списке доступных.
+  После этого достаточно попросить: «следуй AGENT.md и проверь сайт такой-то».</p>
 
-  <p class="rise">Полное описание, устройство и разбор каждого файла — в
+  <p class="rise">Описание устройства и разбор каждого файла собраны в
   <a href="${REPO}#readme">README репозитория</a>.</p>
   </div></section>`
 }
@@ -702,7 +705,7 @@ function footer() {
     <div class="foot__about">
       <p class="foot__big">${icon('security')} SEO-ревизор</p>
       <p>MCP-сервер и агент для технического аудита сайта. Открытый код под лицензией MIT,
-      Node.js 22+, зависимостей четыре.</p>
+      Node.js 22 и новее, четыре зависимости.</p>
       <p class="foot__link">${icon('github')} <a href="${REPO}">github.com/qa-novchenkova/seo-revizor</a></p>
     </div>
     ${links}
@@ -851,14 +854,21 @@ if (spots.length && 'IntersectionObserver' in window) {
   spots.forEach(function (spot) { spy.observe(spot); });
 }
 
-// Кнопка «наверх».
+// Кнопка «наверх» и логотип.
 // Имя переменной намеренно не top: в браузере top — это само окно,
 // и объявление его перезаписать не может.
 var upButton = document.querySelector('.totop');
+var mark = document.querySelector('.nav__mark');
+
+function toStart(event) {
+  if (event) event.preventDefault();
+  window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
+}
+
+if (mark) mark.addEventListener('click', toStart);
+
 if (upButton) {
-  upButton.addEventListener('click', function () {
-    window.scrollTo({ top: 0, behavior: calm ? 'auto' : 'smooth' });
-  });
+  upButton.addEventListener('click', function () { toStart(); });
 
   var toggleUp = function () { upButton.classList.toggle('shown', window.scrollY > 700); };
   toggleUp();
@@ -1040,10 +1050,14 @@ b { font-weight: 600; }
 .nav__mark {
   display: inline-flex; align-items: center; gap: 8px; flex: none;
   font-family: var(--f-head); font-weight: 600; font-size: .93rem; color: #EAF4F2;
-  padding: 13px 0; letter-spacing: -.01em;
+  padding: 13px 0; letter-spacing: -.01em; text-decoration: none;
 }
-.nav__mark .ico { width: 19px; height: 19px; color: #4FD1C3; }
-.nav__links { display: flex; gap: 4px; }
+.nav__mark:hover { color: #FFF; }
+.nav__mark:hover .ico { color: #7FE3D7; }
+.nav__mark .ico { width: 19px; height: 19px; color: #4FD1C3; transition: color .15s ease; }
+/* Отрицательный отступ справа равен внутреннему отступу пункта: так последняя
+   буква меню встаёт ровно по границе колонки содержимого. */
+.nav__links { display: flex; gap: 4px; margin-left: auto; margin-right: -14px; }
 .nav a {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 14px; margin: 8px 0; border-radius: 9px;
@@ -1072,6 +1086,7 @@ b { font-weight: 600; }
 
 @media (max-width: 760px) {
   .nav .wrap { overflow: visible; gap: 12px; }
+  .nav__links { margin-right: 0; }
   .js .nav__burger { display: block; }
   .js .nav__links {
     position: absolute; left: 0; right: 0; top: 100%;

@@ -266,8 +266,9 @@ function about() {
       .join('')}
   </div>
 
-  <p class="note rise">${icon('eye', 'note__ico')} Сервер работает на вашей машине и никуда данные
-  не передаёт. Проверять чужой сайт без согласия владельца не следует: обход создаёт нагрузку.</p>
+  <p class="note rise">${icon('eye', 'note__ico')}<span>Сервер работает на вашей машине и никуда
+  данные не передаёт. Проверять чужой сайт без согласия владельца не следует: обход создаёт
+  нагрузку.</span></p>
   </div></section>`
 }
 
@@ -688,10 +689,10 @@ npm run check meta https://example.com/</code></pre>
     [адрес_сайта]</code></li>
   </ol>
 
-  <p class="note rise">${icon('spark', 'note__ico')} Десять разделов из одиннадцати работают сразу.
-  Ключ нужен только для измерения скорости: его выдаёт Google бесплатно, и он остаётся
-  на вашей машине в файле <code>.env</code>. Без ключа проверка не падает, а помечает
-  раздел скорости как непроверенный.</p>
+  <p class="note rise">${icon('spark', 'note__ico')}<span>Десять разделов из одиннадцати работают
+  сразу. Ключ нужен только для измерения скорости: его выдаёт Google бесплатно, и он остаётся
+  на вашей машине в файле <code>.env</code>. Без ключа проверка не падает, а помечает раздел
+  скорости как непроверенный.</span></p>
 
   <p class="rise">Описание устройства и разбор каждого файла собраны в
   <a href="${REPO}#readme">README репозитория</a>.</p>
@@ -1229,12 +1230,21 @@ b { font-weight: 600; }
 .intro--wide, .sec p.intro--wide { max-width: none; }
 .sec p { max-width: 68ch; }
 
+/* Флекс раскладывает по колонке каждого прямого потомка, поэтому текст
+   заметки лежит в одном span: иначе <code> внутри становится отдельной
+   колонкой и разрывает абзац. */
 .note {
   display: flex; gap: 12px; align-items: flex-start;
   background: var(--accent-soft); border-radius: 12px; padding: 16px 18px;
   color: var(--accent-ink); font-size: .94rem; margin-top: 26px;
 }
 .note__ico { color: var(--accent); margin-top: 3px; }
+.note > span { flex: 1; min-width: 0; }
+.note code {
+  font-family: var(--f-mono); font-size: .86em;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  padding: 1px 6px; border-radius: 5px;
+}
 
 /* ---------- карточки ---------- */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(258px, 1fr)); gap: 16px; }

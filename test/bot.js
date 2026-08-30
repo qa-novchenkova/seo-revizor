@@ -92,4 +92,11 @@ const cut = summary({ site: 'https://example.com/', findings: [], stoppedBy: 'li
 assert.match(cut, /остановлена по лимиту/, 'обрыв по лимиту шагов нельзя скрывать от человека')
 console.log('  ✓ незавершённая проверка честно помечается')
 
+const noModel = summary(
+  { site: 'https://example.com/', findings: [], stoppedBy: 'end_turn', model: 'без модели' },
+  null,
+)
+assert.match(noModel, /без обращения к модели/, 'режим без модели нельзя выдавать за работу агента')
+console.log('  ✓ прогон без модели помечен как таковой')
+
 console.log('\n  Логика бота работает.\n')

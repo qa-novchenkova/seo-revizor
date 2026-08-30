@@ -14,7 +14,8 @@
     "speed": "node test/speed.js",
     "site": "node tools/build-site.js",
     "text": "node tools/check-text.js",
-    "bot": "node src/bot.js"
+    "bot": "node src/bot.js",
+    "direct": "node test/direct.js"
   },
   "keywords": [
     "mcp",

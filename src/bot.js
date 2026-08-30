@@ -20,6 +20,7 @@ import { pathToFileURL } from 'node:url'
 
 import { loadEnv } from './lib/env.js'
 import { audit } from './agent.js'
+import { runDirect } from './direct.js'
 import { toMarkdown } from './report.js'
 import { saveRun, previousRun, compare } from './store.js'
 import { SEVERITY_LABELS, SEVERITIES } from './rules/index.js'
@@ -28,6 +29,18 @@ loadEnv()
 
 const TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const API = `https://api.telegram.org/bot${TOKEN}`
+
+const SITE = 'https://qa-novchenkova.github.io/seo-revizor/'
+
+/**
+ * Есть ли доступ к модели.
+ *
+ * Без ключа бот не отказывается работать, а переключается на прогон
+ * по заранее заданному порядку: те же инструменты, те же находки,
+ * только шаги выбирает не модель. Появится ключ — включится агент,
+ * менять в боте ничего не придётся.
+ */
+const HAS_MODEL = Boolean(process.env.ANTHROPIC_API_KEY)
 
 /**
  * Ограничения. Каждая проверка стоит денег и занимает несколько минут,
@@ -52,14 +65,39 @@ const ADMINS = (process.env.TELEGRAM_ADMINS || '')
   .filter(Boolean)
 
 const HELLO = [
-  'Это Ревизор — технический аудит сайта.',
+  'Ревизор — технический аудит сайта.',
   '',
   'Пришлите адрес, например: https://example.com',
   '',
-  'Проверка занимает несколько минут. По ходу работы я буду показывать,',
-  'что именно смотрю, а в конце пришлю отчёт файлом.',
+  'По ходу работы я показываю, что именно смотрю, а в конце присылаю',
+  'отчёт файлом: что не так, чем вредит, как исправить.',
+].join('\n')
+
+/** Кнопки под приветствием: три вещи, которые спрашивают чаще всего. */
+const MENU = {
+  inline_keyboard: [
+    [
+      { text: 'Что проверяется', callback_data: 'help' },
+      { text: 'Мои лимиты', callback_data: 'limits' },
+    ],
+    [{ text: 'Полный чек-лист на сайте', url: SITE }],
+  ],
+}
+
+/** Команды, которые бот сам прописывает себе при запуске. */
+const COMMANDS = [
+  { command: 'start', description: 'Начать и увидеть подсказку' },
+  { command: 'help', description: 'Что именно проверяется' },
+  { command: 'limits', description: 'Сколько проверок осталось сегодня' },
+]
+
+const ABOUT = 'Технический аудит сайта: индексация, зеркала, разметка, ссылки, безопасность, скорость.'
+
+const DESCRIPTION = [
+  'Пришлите адрес сайта — получите отчёт: что не так, чем это вредит и как исправить.',
   '',
-  'Команды: /help — что проверяется, /limits — сколько проверок осталось.',
+  'Проверяются индексация и robots.txt, зеркала и дубли, мета-теги и заголовки,',
+  'внутренние ссылки, безопасность, аналитика, дубли контента и скорость загрузки.',
 ].join('\n')
 
 const HELP = [
@@ -99,13 +137,19 @@ export async function start() {
     process.exit(1)
   }
 
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.error('Нет ANTHROPIC_API_KEY. Без него агент не сможет обратиться к модели.')
-    process.exit(1)
-  }
-
   const me = await call('getMe')
+
+  // Оформление бота задаётся здесь, а не руками в BotFather: так подписи
+  // лежат в репозитории вместе с кодом и не расходятся с тем, что бот умеет.
+  await describeBot()
+
   console.log(`Бот @${me.username} запущен. Остановить: Ctrl+C`)
+  console.log(
+    HAS_MODEL
+      ? 'Режим: агент. Порядок проверок выбирает модель.'
+      : 'Режим: без модели. Проверки идут по заданному порядку, обращений к модели нет.\n' +
+        'Добавьте ANTHROPIC_API_KEY в .env и перезапустите, чтобы включить агента.',
+  )
 
   let offset = 0
   let alive = true
@@ -121,7 +165,11 @@ export async function start() {
     try {
       // Длинное ожидание: запрос висит до 30 секунд и возвращается сразу,
       // как только придёт сообщение. Так не нужно опрашивать сервер вхолостую.
-      updates = await call('getUpdates', { offset, timeout: 30, allowed_updates: ['message'] })
+      updates = await call('getUpdates', {
+        offset,
+        timeout: 30,
+        allowed_updates: ['message', 'callback_query'],
+      })
     } catch (error) {
       console.error('Не удалось получить обновления:', error.message || error)
       await sleep(3000)
@@ -131,8 +179,39 @@ export async function start() {
     for (const update of updates) {
       offset = update.update_id + 1
       if (update.message) handleMessage(update.message).catch(reportFailure)
+      if (update.callback_query) handleButton(update.callback_query).catch(reportFailure)
     }
   }
+}
+
+/** Название, описание и список команд бота. */
+async function describeBot() {
+  const tasks = [
+    ['setMyCommands', { commands: COMMANDS }],
+    ['setMyShortDescription', { short_description: ABOUT }],
+    ['setMyDescription', { description: DESCRIPTION }],
+  ]
+
+  for (const [method, payload] of tasks) {
+    // Оформление не должно мешать работе: Telegram отклоняет повторную
+    // установку того же текста, и это не повод не запускаться.
+    await call(method, payload).catch((error) => {
+      console.error(`${method}: ${error.message || error}`)
+    })
+  }
+}
+
+/** Нажатие на кнопку под сообщением. */
+async function handleButton(query) {
+  const chatId = query.message?.chat?.id
+  const userId = String(query.from?.id || chatId)
+
+  // Telegram ждёт подтверждения, иначе на кнопке останется крутиться часики
+  await call('answerCallbackQuery', { callback_query_id: query.id }).catch(() => {})
+
+  if (!chatId) return
+  if (query.data === 'help') await send(chatId, HELP)
+  if (query.data === 'limits') await send(chatId, limitsFor(userId))
 }
 
 // ── разбор сообщений ─────────────────────────────────────────────────────────
@@ -144,7 +223,7 @@ async function handleMessage(message) {
 
   if (!text) return
 
-  if (text.startsWith('/start')) return void (await send(chatId, HELLO))
+  if (text.startsWith('/start')) return void (await send(chatId, HELLO, MENU))
   if (text.startsWith('/help')) return void (await send(chatId, HELP))
   if (text.startsWith('/limits')) return void (await send(chatId, limitsFor(userId)))
 
@@ -274,14 +353,15 @@ async function runAudit(job, notice) {
     await edit(chatId, progress.message_id, lines.join('\n')).catch(() => {})
   }
 
-  const result = await audit(site, {
-    onStep: (event) => {
-      if (event.type === 'call') {
-        done.push(describeCall(event))
-        show()
-      }
-    },
-  })
+  const onStep = (event) => {
+    if (event.type === 'call') {
+      done.push(describeCall(event))
+      show()
+    }
+  }
+
+  // Один и тот же вызов для обоих режимов: наружу они отдают одинаковый прогон
+  const result = HAS_MODEL ? await audit(site, { onStep }) : await runDirect(site, { onStep })
 
   const minutes = Math.max(1, Math.round((Date.now() - started) / 60_000))
   done.push(`готово за ${minutes} мин`)
@@ -349,6 +429,10 @@ export function summary(result, diff) {
     lines.push('Проверка остановлена по лимиту шагов: разобраны не все разделы.')
   }
 
+  if (result.model === 'без модели') {
+    lines.push('Проверки шли по заданному порядку, без обращения к модели.')
+  }
+
   return lines.join('\n')
 }
 
@@ -391,8 +475,13 @@ async function call(method, payload = {}) {
   return data.result
 }
 
-function send(chatId, text) {
-  return call('sendMessage', { chat_id: chatId, text, disable_web_page_preview: true })
+function send(chatId, text, keyboard = null) {
+  return call('sendMessage', {
+    chat_id: chatId,
+    text,
+    disable_web_page_preview: true,
+    ...(keyboard ? { reply_markup: keyboard } : {}),
+  })
 }
 
 function edit(chatId, messageId, text) {

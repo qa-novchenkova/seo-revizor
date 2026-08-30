@@ -382,9 +382,10 @@ function checklistSection() {
     .join('')
 
   const chips = checklist.sections
-    .map((section) => {
+    .map((section, i) => {
       const [light, dark] = SECTION_TONES[section.id] || ['#0F7A72', '#4FD1C3']
-      return `<a class="chip" href="#cl-${section.id}" style="--tone:${light}; --tone-dark:${dark}">
+      return `<a class="chip${i === 0 ? ' on' : ''}" href="#cl-${section.id}"
+      style="--tone:${light}; --tone-dark:${dark}">
       ${icon(SECTION_ICONS[section.id] || 'check')}${esc(section.title)}<b>${section.checks.length}</b>
     </a>`
     })
@@ -392,34 +393,37 @@ function checklistSection() {
 
   return `<section class="sec sec--alt" id="checklist"><div class="wrap">
   <h2 class="rise">Чек-листы <span class="badge">${checks.length}</span></h2>
-  <p class="intro rise">Полный список в ${plural(checklist.sections.length, ['разделе', 'разделах', 'разделах'])}.
-  У каждого пункта указано, чем дефект вреден и каким способом проверяется. Автоматизировано
-  <b>${automated}</b> пунктов; остальные <b>${manual}</b> требуют ручной проверки или платных сервисов.
-  Это не пробел, а граница метода: оценить, раскрывает ли заголовок категории её содержимое,
-  можно только глазами.</p>
+  <p class="intro rise">Полный список в ${plural(checklist.sections.length, ['разделе', 'разделах', 'разделах'])}
+  — разделы открываются вкладками ниже. У каждого пункта указано, чем дефект вреден и каким
+  способом проверяется. Автоматизировано <b>${automated}</b> пунктов; остальные <b>${manual}</b>
+  требуют ручной проверки или платных сервисов. Это не пробел, а граница метода: раскрывает ли
+  заголовок категории её содержимое, можно оценить только глазами.</p>
 
-  <nav class="chips rise" aria-label="Разделы чек-листа">${chips}</nav>
+  <nav class="chips tabs rise" aria-label="Разделы чек-листа">${chips}</nav>
 
-  <ul class="legend rise">${legend}</ul>
-
-  <div class="filters rise" role="group" aria-label="Отбор пунктов">
-    <button type="button" data-filter="all" class="on">${icon('rules')} Все <b>${checks.length}</b></button>
+  <div class="filters rise" role="group" aria-label="Показать пункты по способу проверки">
+    <span class="filters__label">Через все разделы:</span>
+    <button type="button" data-filter="all">${icon('rules')} Все <b>${checks.length}</b></button>
     <button type="button" data-filter="machine">${icon('bot')} Автопроверки <b>${automated}</b></button>
     <button type="button" data-filter="human">${icon('eye')} Ручные <b>${manual}</b></button>
   </div>
 
-  <div class="lists" data-mode="all">
+  <ul class="legend rise">${legend}</ul>
+
+  <div class="lists" data-view="tab">
     ${checklist.sections.map(checklistBlock).join('')}
   </div>
   </div></section>`
 }
 
-function checklistBlock(section) {
+function checklistBlock(section, position) {
   const machine = section.checks.filter(isMachine).length
   const share = Math.round((machine / section.checks.length) * 100)
   const [light, dark] = SECTION_TONES[section.id] || ['#1A6F69', '#4FB8AF']
 
-  return `<section class="block rise" id="cl-${section.id}"
+  // Открыт первый раздел. Остальные показываются по нажатию на вкладку —
+  // иначе страница растягивается на все 142 пункта сразу.
+  return `<section class="block rise${position === 0 ? ' open' : ''}" id="cl-${section.id}"
   data-machine="${machine}" data-human="${section.checks.length - machine}"
   style="--tone:${light}; --tone-dark:${dark}">
   <header class="block__head">
@@ -540,9 +544,9 @@ function glossarySection() {
 
   return `<section class="sec" id="glossary"><div class="wrap">
   <h2 class="rise">Глоссарий <span class="badge">${terms.length}</span></h2>
-  <p class="intro rise">Термины, которые встречаются в отчётах и в описании проекта —
-  и те, что относятся к устройству агента, и те, что относятся к техническому SEO.
-  Без расшифровки половина замечаний аудита выглядит набором сокращений.</p>
+  <p class="intro rise">Термины из отчётов аудита и из описания проекта. Одни описывают
+  устройство агента, другие относятся к техническому SEO. Без расшифровки строка
+  «LCP 4,2 с при норме 2,5» не говорит владельцу сайта ничего.</p>
 
   <nav class="chips rise" aria-label="Разделы глоссария">${jump}</nav>
 
@@ -662,15 +666,46 @@ function script() {
   return `
 var calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-// Отбор проверок
-document.querySelectorAll('.filters button').forEach(function (button) {
-  button.addEventListener('click', function () {
-    document.querySelectorAll('.filters button').forEach(function (other) {
-      other.classList.toggle('on', other === button);
-    });
-    document.querySelector('.lists').dataset.mode = button.dataset.filter;
+// Чек-листы: вкладки разделов и отбор по способу проверки.
+// Это два разных взгляда на один список, поэтому включён всегда ровно один:
+// либо открыт один раздел, либо показаны все разделы с отбором.
+var lists = document.querySelector('.lists');
+var tabs = [].slice.call(document.querySelectorAll('.tabs .chip'));
+var modes = [].slice.call(document.querySelectorAll('.filters button'));
+var blocks = [].slice.call(document.querySelectorAll('.block'));
+
+function openSection(id) {
+  lists.dataset.view = 'tab';
+  blocks.forEach(function (block) { block.classList.toggle('open', block.id === id); });
+  tabs.forEach(function (tab) { tab.classList.toggle('on', tab.getAttribute('href') === '#' + id); });
+  modes.forEach(function (mode) { mode.classList.remove('on'); });
+}
+
+tabs.forEach(function (tab) {
+  tab.addEventListener('click', function (event) {
+    event.preventDefault();
+    openSection(tab.getAttribute('href').slice(1));
   });
 });
+
+modes.forEach(function (button) {
+  button.addEventListener('click', function () {
+    lists.dataset.view = button.dataset.filter;
+    modes.forEach(function (other) { other.classList.toggle('on', other === button); });
+    tabs.forEach(function (tab) { tab.classList.remove('on'); });
+  });
+});
+
+// Ссылка вида #cl-security извне должна открывать нужный раздел, а не теряться.
+// Слушаем и смену адреса тоже: якорь может появиться уже после загрузки.
+function openFromHash() {
+  if (location.hash.indexOf('#cl-') !== 0) return;
+  if (!document.getElementById(location.hash.slice(1))) return;
+  openSection(location.hash.slice(1));
+}
+
+openFromHash();
+window.addEventListener('hashchange', openFromHash);
 
 // Появление блоков при прокрутке
 var risers = document.querySelectorAll('.rise');
@@ -952,6 +987,31 @@ b { font-weight: 600; }
 }
 .chip--plain { --tone: var(--accent); --tone-dark: var(--accent); }
 
+/* Выбранная вкладка */
+.chip.on { background: var(--hue); border-color: var(--hue); color: #FFF; }
+.chip.on b { color: #FFF; opacity: .85; }
+.chip.on:hover { background: var(--hue); }
+@media (prefers-color-scheme: dark) {
+  .chip.on { color: #0B1211; }
+  .chip.on b { color: #0B1211; }
+}
+.tabs { gap: 8px; margin-bottom: 18px; }
+/* На узком экране десять вкладок встают в десять строк и съедают пол-экрана,
+   поэтому там они превращаются в прокручиваемую ленту. */
+@media (max-width: 700px) {
+  .tabs {
+    flex-wrap: nowrap; overflow-x: auto; padding-bottom: 8px;
+    scroll-snap-type: x proximity; scrollbar-width: thin;
+  }
+  .tabs .chip { flex: none; scroll-snap-align: start; }
+}
+
+.filters__label {
+  align-self: center; margin-right: 4px;
+  font-family: var(--f-mono); font-size: .68rem; font-weight: 600;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--ink-mute);
+}
+
 /* ---------- разделы ---------- */
 .sec { padding: 74px 0; scroll-margin-top: 54px; }
 .sec--alt { background: var(--surface); border-block: 1px solid var(--line); }
@@ -1151,15 +1211,19 @@ b { font-weight: 600; }
 .tag--manual { color: var(--warn); }
 .tag--service { color: var(--sky); }
 
-.lists[data-mode="machine"] .chk[data-side="human"],
-.lists[data-mode="human"] .chk[data-side="machine"] { display: none; }
-.lists[data-mode="machine"] .block[data-machine="0"],
-.lists[data-mode="human"] .block[data-human="0"] { display: none; }
-.lists[data-mode="machine"] .chk[data-side="machine"]:first-of-type,
-.lists[data-mode="human"] .chk[data-side="human"]:first-of-type { border-radius: 12px 12px 0 0; }
-.lists[data-mode="machine"] .chk[data-side="machine"]:last-of-type,
-.lists[data-mode="human"] .chk[data-side="human"]:last-of-type { border-radius: 0 0 12px 12px; }
-.lists[data-mode="machine"] .barline, .lists[data-mode="human"] .barline { display: none; }
+/* Вкладки: открыт один раздел. Прячем только при работающих скриптах —
+   без них показываются все разделы подряд, и ссылки-якоря работают как обычно. */
+.js .lists[data-view="tab"] .block:not(.open) { display: none; }
+
+.lists[data-view="machine"] .chk[data-side="human"],
+.lists[data-view="human"] .chk[data-side="machine"] { display: none; }
+.lists[data-view="machine"] .block[data-machine="0"],
+.lists[data-view="human"] .block[data-human="0"] { display: none; }
+.lists[data-view="machine"] .chk[data-side="machine"]:first-of-type,
+.lists[data-view="human"] .chk[data-side="human"]:first-of-type { border-radius: 12px 12px 0 0; }
+.lists[data-view="machine"] .chk[data-side="machine"]:last-of-type,
+.lists[data-view="human"] .chk[data-side="human"]:last-of-type { border-radius: 0 0 12px 12px; }
+.lists[data-view="machine"] .barline, .lists[data-view="human"] .barline { display: none; }
 
 /* ---------- правила ---------- */
 .sevs { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 13px; margin-bottom: 30px; }

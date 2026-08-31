@@ -83,13 +83,33 @@ const ALLOWED = (process.env.TELEGRAM_ALLOWED_USERS || '')
   .filter(Boolean)
 
 /**
- * Код доступа. Если задан, посторонний должен один раз прислать его боту.
+ * Коды доступа. Если заданы, посторонний должен один раз прислать код.
  *
  * Это мягче белого списка: заранее знать чужой номер не нужно, достаточно
  * написать код в письме. И надёжнее, чем открывать бота вручную на время:
  * забыть закрыть его нельзя, потому что закрывать нечего.
+ *
+ * Кодов можно задать несколько через запятую и у каждого поставить дату,
+ * после которой он перестаёт работать:
+ *
+ *   BOT_ACCESS_CODE=битрикс24, сеоджаз:2026-09-30, показ
+ *
+ * Смысл в том, чтобы давать свой код на каждый отклик: видно, кто пришёл,
+ * и старые коды закрываются сами. Уже вошедших смена кода не выкидывает.
  */
-const ACCESS_CODE = (process.env.BOT_ACCESS_CODE || '').trim()
+const ACCESS_CODES = (process.env.BOT_ACCESS_CODE || '')
+  .split(',')
+  .map((item) => item.trim())
+  .filter(Boolean)
+  .map((item) => {
+    const at = item.lastIndexOf(':')
+    const looksLikeDate = at > 0 && /^\d{4}-\d{2}-\d{2}$/.test(item.slice(at + 1).trim())
+
+    return {
+      code: (looksLikeDate ? item.slice(0, at) : item).trim().toLowerCase(),
+      until: looksLikeDate ? item.slice(at + 1).trim() : null,
+    }
+  })
 
 /** Общий потолок на всех: страховка кошелька от чужой активности. */
 const GLOBAL_PER_DAY = Number(process.env.BOT_GLOBAL_DAILY_LIMIT || 0)
@@ -225,12 +245,25 @@ function saveUnlocked() {
   }
 }
 
+/**
+ * Ищет код среди действующих.
+ * Возвращает сам код, чтобы было видно, по какому отклику пришёл человек.
+ */
+export function matchCode(text) {
+  const given = String(text || '').trim().toLowerCase()
+  if (!given) return null
+
+  return (
+    ACCESS_CODES.find((entry) => entry.code === given && (!entry.until || entry.until >= today())) || null
+  )
+}
+
 /** Пускать ли этого человека к проверкам. */
 export function accessState(userId, text = '') {
   if (ALLOWED.length && !ALLOWED.includes(userId)) return 'closed'
-  if (!ACCESS_CODE) return 'open'
+  if (!ACCESS_CODES.length) return 'open'
   if (unlocked.has(userId)) return 'open'
-  return text.trim().toLowerCase() === ACCESS_CODE.toLowerCase() ? 'code' : 'locked'
+  return matchCode(text) ? 'code' : 'locked'
 }
 
 /** Общий счётчик на всех: обнуляется вместе с сутками. */
@@ -253,6 +286,20 @@ export function spendGlobal() {
     globalCount = 0
   }
   globalCount += 1
+}
+
+/** Как назвать человека в уведомлении: имя, ник и номер. */
+export function describeUser(from = {}) {
+  const name = [from.first_name, from.last_name].filter(Boolean).join(' ')
+  const nick = from.username ? `@${from.username}` : ''
+  return [name, nick, `id ${from.id}`].filter(Boolean).join(', ')
+}
+
+/** Сообщение владельцу бота: кто-то воспользовался кодом. */
+async function tellAdmins(text) {
+  for (const admin of ADMINS) {
+    await send(admin, text).catch(() => {})
+  }
 }
 
 /** Сброс для тестов. */
@@ -365,9 +412,13 @@ async function handleMessage(message) {
   const access = accessState(userId, text)
 
   if (access === 'code') {
+    const entry = matchCode(text)
     unlocked.add(userId)
     saveUnlocked()
-    return void (await send(chatId, 'Код принят. Пришлите адрес сайта — проверю.', KEYS))
+
+    await send(chatId, `Код принят, доступ открыт.\n\n${HELLO}`, KEYS)
+    await tellAdmins(`Кодом «${entry.code}» открыл доступ ${describeUser(message.from)}`)
+    return
   }
 
   if (access === 'closed') {
@@ -377,7 +428,13 @@ async function handleMessage(message) {
   if (access === 'locked') {
     return void (await send(
       chatId,
-      'Бот открыт по коду. Пришлите код — он указан в письме, вместе со ссылкой на бота.',
+      [
+        'Ревизор — технический аудит сайта.',
+        '',
+        'Доступ по коду. Пришлите кодовое слово — оно указано в письме рядом со ссылкой на бота.',
+        '',
+        `Посмотреть, что умеет бот, можно и без кода: ${SITE}`,
+      ].join('\n'),
     ))
   }
 

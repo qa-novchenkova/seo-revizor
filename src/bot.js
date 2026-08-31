@@ -24,6 +24,10 @@ import { runDirect } from './direct.js'
 import { toMarkdown } from './report.js'
 import { saveRun, previousRun, compare } from './store.js'
 import { SEVERITY_LABELS, SEVERITIES } from './rules/index.js'
+import { checkSpeed } from './checks/speed.js'
+import { checkSecurity } from './checks/security.js'
+import { checkRobots } from './checks/robots.js'
+import { checkMeta } from './checks/meta.js'
 
 loadEnv()
 
@@ -50,6 +54,21 @@ const LIMITS = {
   perDay: Number(process.env.BOT_DAILY_LIMIT || 5),
   cooldownMs: Number(process.env.BOT_COOLDOWN_MINUTES || 2) * 60_000,
   queue: Number(process.env.BOT_QUEUE_LIMIT || 5),
+  // Одиночные проверки дешевле полного аудита: модель не участвует,
+  // запрос один. Поэтому у них свой, более щедрый лимит.
+  quickPerDay: Number(process.env.BOT_QUICK_DAILY_LIMIT || 30),
+  quickCooldownMs: Number(process.env.BOT_QUICK_COOLDOWN_SECONDS || 20) * 1000,
+}
+
+/**
+ * Одиночные проверки: перепроверить одно место после правки,
+ * не гоняя весь аудит заново.
+ */
+const QUICK = {
+  speed: { title: 'Скорость', run: (site) => checkSpeed(site) },
+  security: { title: 'Безопасность', run: (site) => checkSecurity(site) },
+  robots: { title: 'robots.txt', run: (site) => checkRobots(site) },
+  meta: { title: 'Мета-теги', run: (url) => checkMeta(url) },
 }
 
 /** Если список задан, проверки доступны только этим пользователям. */
@@ -88,6 +107,10 @@ const COMMANDS = [
   { command: 'start', description: 'Начать и увидеть подсказку' },
   { command: 'help', description: 'Что именно проверяется' },
   { command: 'limits', description: 'Сколько проверок осталось сегодня' },
+  { command: 'speed', description: 'Только скорость: /speed адрес' },
+  { command: 'security', description: 'Только безопасность: /security адрес' },
+  { command: 'robots', description: 'Только robots.txt: /robots адрес' },
+  { command: 'meta', description: 'Только мета-теги страницы: /meta адрес' },
 ]
 
 const ABOUT = 'Технический аудит сайта: индексация, зеркала, разметка, ссылки, безопасность, скорость.'
@@ -110,6 +133,15 @@ const HELP = [
   '· аналитика: счётчики на страницах, дубли, синхронная загрузка',
   '· контент: дубли текста, пустые страницы, расхождения в контактах',
   '· скорость и Core Web Vitals',
+  '',
+  '',
+  'Пришлите адрес — проверю всё сразу. Если нужно перепроверить одно место',
+  'после правки, есть быстрые команды:',
+  '',
+  '/speed адрес — скорость и Core Web Vitals',
+  '/security адрес — сертификат, заголовки, служебные файлы',
+  '/robots адрес — robots.txt и карта сайта',
+  '/meta адрес — мета-теги конкретной страницы',
   '',
   'Полный чек-лист: https://qa-novchenkova.github.io/seo-revizor/',
 ].join('\n')
@@ -226,6 +258,10 @@ async function handleMessage(message) {
   if (text.startsWith('/help')) return void (await send(chatId, HELP))
   if (text.startsWith('/limits')) return void (await send(chatId, limitsFor(userId)))
 
+  // Быстрая проверка: /speed адрес
+  const quick = text.match(/^\/(\w+)/)
+  if (quick && QUICK[quick[1]]) return void (await runQuick(chatId, userId, quick[1], text))
+
   const site = parseSite(text)
   if (!site) {
     return void (await send(chatId, 'Нужен адрес сайта целиком, например https://example.com'))
@@ -254,6 +290,77 @@ async function handleMessage(message) {
   runQueue(notice)
 }
 
+// ── одиночные проверки ───────────────────────────────────────────────────────
+
+async function runQuick(chatId, userId, name, text) {
+  const { title, run } = QUICK[name]
+  const site = parseSite(text.replace(/^\/\w+(@\S+)?/, ''))
+
+  if (!site) {
+    return void (await send(chatId, `Нужен адрес: /${name} example.com`))
+  }
+
+  if (ALLOWED.length && !ALLOWED.includes(userId)) {
+    return void (await send(chatId, 'Бот работает в закрытом режиме.'))
+  }
+
+  const denial = checkQuickLimits(userId)
+  if (denial) return void (await send(chatId, denial))
+
+  spendQuick(userId)
+
+  const notice = await send(chatId, `${title}: проверяю ${site}…`)
+  const started = Date.now()
+
+  try {
+    const result = await run(site)
+    const body = renderQuick(title, site, result, Date.now() - started)
+    await edit(chatId, notice.message_id, body)
+  } catch (error) {
+    await edit(chatId, notice.message_id, `${title}: не получилось — ${error.message || error}`)
+  }
+}
+
+/** Результат одиночной проверки текстом: файл ради нескольких строк не нужен. */
+export function renderQuick(title, site, result, ms) {
+  const head = `${title} · ${site}`
+
+  if (result.ok === false) {
+    return [head, '', result.error || 'проверка не отработала', result.hint || ''].join('\n').trim()
+  }
+
+  const lines = [head, '']
+
+  // У скорости главное — цифры, а не только замечания
+  if (result.metrics) {
+    const names = { lcp: 'LCP', cls: 'CLS', inp: 'INP', ttfb: 'ответ сервера', total: 'вес страницы' }
+    const shown = Object.entries(result.metrics).filter(([, value]) => value)
+    if (result.score !== undefined) lines.push(`Оценка: ${result.score} из 100`)
+    for (const [key, value] of shown) lines.push(`${names[key] || key}: ${value}`)
+    lines.push('')
+  }
+
+  const findings = result.findings || []
+
+  if (!findings.length) {
+    lines.push('Замечаний нет.')
+  } else {
+    lines.push(`Найдено ${findings.length}:`, '')
+    for (const finding of findings) {
+      lines.push(`[${SEVERITY_LABELS[finding.severity]}] ${finding.title}`)
+      lines.push(finding.message)
+      lines.push(`→ ${finding.fix}`)
+      lines.push('')
+    }
+  }
+
+  lines.push(`Проверено за ${seconds(ms)}.`)
+
+  // В сообщение Telegram помещается около 4000 знаков
+  const text = lines.join('\n').trim()
+  return text.length > 3900 ? text.slice(0, 3880) + '\n\n…список обрезан, запустите полный аудит' : text
+}
+
 /** Достаёт адрес сайта из сообщения. */
 export function parseSite(text) {
   const raw = text.split(/\s+/).find((word) => /^https?:\/\//i.test(word) || /^[a-z0-9-]+(\.[a-z0-9-]+)+/i.test(word))
@@ -278,9 +385,28 @@ function stateOf(userId) {
   const state = usage.get(userId)
   if (state && state.day === today()) return state
 
-  const fresh = { day: today(), count: 0, lastAt: 0 }
+  const fresh = { day: today(), count: 0, lastAt: 0, quickCount: 0, quickAt: 0 }
   usage.set(userId, fresh)
   return fresh
+}
+
+export function checkQuickLimits(userId) {
+  const state = stateOf(userId)
+
+  if (state.quickCount >= LIMITS.quickPerDay) {
+    return `Быстрых проверок на сегодня больше нет: ${LIMITS.quickPerDay} в сутки.`
+  }
+
+  const wait = state.quickAt + LIMITS.quickCooldownMs - Date.now()
+  if (wait > 0) return `Следующую быструю проверку можно через ${Math.ceil(wait / 1000)} с.`
+
+  return null
+}
+
+export function spendQuick(userId) {
+  const state = stateOf(userId)
+  state.quickCount += 1
+  state.quickAt = Date.now()
 }
 
 export function checkLimits(userId) {
@@ -312,7 +438,15 @@ export function resetLimits() {
 function limitsFor(userId) {
   const state = stateOf(userId)
   const left = Math.max(0, LIMITS.perDay - state.count)
-  return `Проверок осталось сегодня: ${left} из ${LIMITS.perDay}.\nПауза между запусками: ${Math.round(LIMITS.cooldownMs / 60_000)} мин.`
+  const quickLeft = Math.max(0, LIMITS.quickPerDay - state.quickCount)
+
+  return [
+    `Полных проверок осталось сегодня: ${left} из ${LIMITS.perDay}.`,
+    `Пауза между запусками: ${Math.round(LIMITS.cooldownMs / 60_000)} мин.`,
+    '',
+    `Быстрых проверок осталось: ${quickLeft} из ${LIMITS.quickPerDay}.`,
+    `Пауза между ними: ${Math.round(LIMITS.quickCooldownMs / 1000)} с.`,
+  ].join('\n')
 }
 
 // ── очередь ──────────────────────────────────────────────────────────────────

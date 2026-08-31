@@ -8,7 +8,19 @@
  */
 import assert from 'node:assert/strict'
 
-import { parseSite, checkLimits, spend, resetLimits, describeCall, summary, line, seconds } from '../src/bot.js'
+import {
+  parseSite,
+  checkLimits,
+  spend,
+  resetLimits,
+  describeCall,
+  summary,
+  line,
+  seconds,
+  renderQuick,
+  checkQuickLimits,
+  spendQuick,
+} from '../src/bot.js'
 
 console.log('\n  Проверка бота\n')
 
@@ -125,5 +137,66 @@ const noModel = summary(
 )
 assert.match(noModel, /без обращения к модели/, 'режим без модели нельзя выдавать за работу агента')
 console.log('  ✓ прогон без модели помечен как таковой')
+
+// ── одиночные проверки ───────────────────────────────────────────────────────
+
+resetLimits()
+assert.equal(checkQuickLimits('quick-1'), null, 'первая быстрая проверка разрешена')
+spendQuick('quick-1')
+assert.match(checkQuickLimits('quick-1'), /через \d+ с/, 'между быстрыми проверками своя короткая пауза')
+assert.equal(checkLimits('quick-1'), null, 'быстрая проверка не съедает лимит полного аудита')
+console.log('  ✓ у быстрых проверок отдельный лимит и своя пауза')
+
+const speed = renderQuick(
+  'Скорость',
+  'https://example.com/',
+  {
+    ok: true,
+    score: 62,
+    metrics: { lcp: '4.1 с', cls: '0.02', inp: null, ttfb: '210 мс', total: '1.4 МБ' },
+    findings: [
+      {
+        severity: 'critical',
+        title: 'Долго появляется главное содержимое',
+        message: 'LCP на мобильных: 4.1 с при норме до 2,5 с.',
+        fix: 'Сожмите картинку первого экрана.',
+      },
+    ],
+  },
+  41_000,
+)
+
+assert.match(speed, /Оценка: 62 из 100/, 'по скорости важны цифры, а не только замечания')
+assert.match(speed, /LCP: 4\.1 с/)
+assert.doesNotMatch(speed, /INP/, 'непосчитанные показатели не выводим')
+assert.match(speed, /→ Сожмите/, 'у каждого замечания есть, что делать')
+assert.match(speed, /Проверено за 41 с/)
+console.log('  ✓ быстрая проверка скорости показывает показатели и что исправить')
+
+const clean2 = renderQuick('robots.txt', 'https://example.com/', { ok: true, findings: [] }, 800)
+assert.match(clean2, /Замечаний нет/)
+
+const failed = renderQuick('Скорость', 'https://example.com/', { ok: false, error: 'нет ключа', hint: 'получите ключ' }, 100)
+assert.match(failed, /нет ключа/)
+assert.match(failed, /получите ключ/, 'подсказку из проверки нельзя терять')
+console.log('  ✓ пустой результат и сбой описываются понятно')
+
+const many = renderQuick(
+  'Мета-теги',
+  'https://example.com/',
+  {
+    ok: true,
+    findings: Array.from({ length: 60 }, (_, i) => ({
+      severity: 'minor',
+      title: 'Замечание ' + i,
+      message: 'Очень длинное описание замечания, чтобы проверить обрезку. '.repeat(3),
+      fix: 'Что-нибудь сделать.',
+    })),
+  },
+  500,
+)
+assert.ok(many.length <= 3950, `сообщение должно влезать в лимит Telegram, сейчас ${many.length}`)
+assert.match(many, /список обрезан/, 'обрезку нельзя делать молча')
+console.log('  ✓ длинный список обрезается и об этом сказано')
 
 console.log('\n  Логика бота работает.\n')

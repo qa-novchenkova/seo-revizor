@@ -21,7 +21,9 @@ import { pathToFileURL } from 'node:url'
 import { loadEnv } from './lib/env.js'
 import { audit } from './agent.js'
 import { runDirect } from './direct.js'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import { toMarkdown, toHtml } from './report.js'
 import { htmlToPdf, findBrowser } from './pdf.js'
@@ -79,6 +81,21 @@ const ALLOWED = (process.env.TELEGRAM_ALLOWED_USERS || '')
   .split(',')
   .map((id) => id.trim())
   .filter(Boolean)
+
+/**
+ * Код доступа. Если задан, посторонний должен один раз прислать его боту.
+ *
+ * Это мягче белого списка: заранее знать чужой номер не нужно, достаточно
+ * написать код в письме. И надёжнее, чем открывать бота вручную на время:
+ * забыть закрыть его нельзя, потому что закрывать нечего.
+ */
+const ACCESS_CODE = (process.env.BOT_ACCESS_CODE || '').trim()
+
+/** Общий потолок на всех: страховка кошелька от чужой активности. */
+const GLOBAL_PER_DAY = Number(process.env.BOT_GLOBAL_DAILY_LIMIT || 0)
+
+/** Куда записываются те, кто уже ввёл код: перезапуск не должен их выкидывать. */
+const ACCESS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'data', 'access.json')
 
 /** Кому показывать расход токенов. */
 const ADMINS = (process.env.TELEGRAM_ADMINS || '')
@@ -183,6 +200,68 @@ const usage = new Map()
 const queue = []
 let working = false
 
+/** Сколько проверок сделано за сутки всеми вместе. */
+let globalDay = ''
+let globalCount = 0
+
+/** Кто уже ввёл код доступа. Хранится на диске: перезапуск не должен их выкидывать. */
+const unlocked = loadUnlocked()
+
+function loadUnlocked() {
+  try {
+    return new Set(JSON.parse(readFileSync(ACCESS_FILE, 'utf8')))
+  } catch {
+    return new Set()
+  }
+}
+
+function saveUnlocked() {
+  try {
+    mkdirSync(path.dirname(ACCESS_FILE), { recursive: true })
+    writeFileSync(ACCESS_FILE, JSON.stringify([...unlocked]), 'utf8')
+  } catch (error) {
+    // Не записалось — доступ продолжит работать до перезапуска
+    console.error('Не удалось сохранить список доступа:', error.message || error)
+  }
+}
+
+/** Пускать ли этого человека к проверкам. */
+export function accessState(userId, text = '') {
+  if (ALLOWED.length && !ALLOWED.includes(userId)) return 'closed'
+  if (!ACCESS_CODE) return 'open'
+  if (unlocked.has(userId)) return 'open'
+  return text.trim().toLowerCase() === ACCESS_CODE.toLowerCase() ? 'code' : 'locked'
+}
+
+/** Общий счётчик на всех: обнуляется вместе с сутками. */
+export function checkGlobalLimit() {
+  if (!GLOBAL_PER_DAY) return null
+
+  if (globalDay !== today()) {
+    globalDay = today()
+    globalCount = 0
+  }
+
+  return globalCount >= GLOBAL_PER_DAY
+    ? 'На сегодня общий лимит проверок исчерпан. Попробуйте завтра.'
+    : null
+}
+
+export function spendGlobal() {
+  if (globalDay !== today()) {
+    globalDay = today()
+    globalCount = 0
+  }
+  globalCount += 1
+}
+
+/** Сброс для тестов. */
+export function resetAccess() {
+  unlocked.clear()
+  globalDay = ''
+  globalCount = 0
+}
+
 // ── запуск ───────────────────────────────────────────────────────────────────
 
 /**
@@ -282,6 +361,26 @@ async function handleMessage(message) {
 
   if (!text) return
 
+  // ── доступ ───────────────────────────────────────────────────────────────
+  const access = accessState(userId, text)
+
+  if (access === 'code') {
+    unlocked.add(userId)
+    saveUnlocked()
+    return void (await send(chatId, 'Код принят. Пришлите адрес сайта — проверю.', KEYS))
+  }
+
+  if (access === 'closed') {
+    return void (await send(chatId, 'Бот работает в закрытом режиме.'))
+  }
+
+  if (access === 'locked') {
+    return void (await send(
+      chatId,
+      'Бот открыт по коду. Пришлите код — он указан в письме, вместе со ссылкой на бота.',
+    ))
+  }
+
   if (text.startsWith('/start')) return void (await send(chatId, HELLO, KEYS))
   if (text.startsWith('/help')) return void (await send(chatId, HELP))
   if (text.startsWith('/limits') || text === 'Мои лимиты') {
@@ -300,9 +399,8 @@ async function handleMessage(message) {
     return void (await send(chatId, 'Нужен адрес сайта целиком, например https://example.com'))
   }
 
-  if (ALLOWED.length && !ALLOWED.includes(userId)) {
-    return void (await send(chatId, 'Бот работает в закрытом режиме. Проверки доступны не всем.'))
-  }
+  const overall = checkGlobalLimit()
+  if (overall) return void (await send(chatId, overall))
 
   const denial = checkLimits(userId)
   if (denial) return void (await send(chatId, denial))
@@ -312,6 +410,7 @@ async function handleMessage(message) {
   }
 
   spend(userId)
+  spendGlobal()
   queue.push({ chatId, userId, site })
 
   const ahead = queue.length - 1
@@ -331,10 +430,6 @@ async function runQuick(chatId, userId, name, text) {
 
   if (!site) {
     return void (await send(chatId, `Нужен адрес: /${name} example.com`))
-  }
-
-  if (ALLOWED.length && !ALLOWED.includes(userId)) {
-    return void (await send(chatId, 'Бот работает в закрытом режиме.'))
   }
 
   const denial = checkQuickLimits(userId)

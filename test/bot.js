@@ -20,6 +20,9 @@ import {
   renderQuick,
   checkQuickLimits,
   spendQuick,
+  accessState,
+  checkGlobalLimit,
+  resetAccess,
 } from '../src/bot.js'
 
 console.log('\n  Проверка бота\n')
@@ -198,5 +201,14 @@ const many = renderQuick(
 assert.ok(many.length <= 3950, `сообщение должно влезать в лимит Telegram, сейчас ${many.length}`)
 assert.match(many, /список обрезан/, 'обрезку нельзя делать молча')
 console.log('  ✓ длинный список обрезается и об этом сказано')
+
+// ── доступ по коду ───────────────────────────────────────────────────────────
+
+// Код задаётся переменной окружения, поэтому проверяем то поведение,
+// которое видно без него: бот открыт всем, общего потолка нет.
+resetAccess()
+assert.equal(accessState('гость', 'привет'), 'open', 'без кода бот открыт всем')
+assert.equal(checkGlobalLimit(), null, 'без общего лимита ничего не запрещается')
+console.log('  ✓ по умолчанию бот открыт и общего потолка нет')
 
 console.log('\n  Логика бота работает.\n')

@@ -29,6 +29,7 @@ const {
   accessState,
   checkGlobalLimit,
   resetAccess,
+  shouldRetry,
 } = await import('../src/bot.js')
 
 console.log('\n  Проверка бота\n')
@@ -207,6 +208,16 @@ const many = renderQuick(
 assert.ok(many.length <= 3950, `сообщение должно влезать в лимит Telegram, сейчас ${many.length}`)
 assert.match(many, /список обрезан/, 'обрезку нельзя делать молча')
 console.log('  ✓ длинный список обрезается и об этом сказано')
+
+// ── повтор обращений к Telegram ──────────────────────────────────────────────
+
+const network = Object.assign(new Error('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })
+const refusal = Object.assign(new Error('sendMessage: chat not found'), { fromTelegram: true })
+
+assert.equal(shouldRetry(network, 1, 3), true, 'обрыв сети — пробуем ещё раз')
+assert.equal(shouldRetry(network, 3, 3), false, 'после трёх попыток сдаёмся')
+assert.equal(shouldRetry(refusal, 1, 3), false, 'отказ самого Telegram повторять бессмысленно')
+console.log('  ✓ сетевой сбой повторяется, отказ Telegram — нет')
 
 // ── доступ по коду ───────────────────────────────────────────────────────────
 

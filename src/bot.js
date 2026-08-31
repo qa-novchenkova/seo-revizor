@@ -874,18 +874,44 @@ function safeHost(site) {
 
 // ── общение с Telegram ───────────────────────────────────────────────────────
 
-async function call(method, payload = {}) {
-  const response = await fetch(`${API}/${method}`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(payload),
-    // Длинное ожидание висит до 30 секунд, поэтому запас сверху
-    signal: AbortSignal.timeout(60_000),
-  })
+/**
+ * Стоит ли повторять обращение к Telegram.
+ *
+ * Сеть до Telegram бывает капризной: подключение изредка виснет и обрывается
+ * по времени. Без повтора ответ на нажатие кнопки просто пропадает, и человек
+ * решает, что бот сломался. А вот отказ самого Telegram повторять бессмысленно:
+ * на тот же запрос придёт тот же отказ.
+ */
+export function shouldRetry(error, attempt, attempts = CALL_ATTEMPTS) {
+  if (error?.fromTelegram) return false
+  return attempt < attempts
+}
 
-  const data = await response.json()
-  if (!data.ok) throw new Error(`${method}: ${data.description || response.status}`)
-  return data.result
+const CALL_ATTEMPTS = 3
+
+async function call(method, payload = {}, attempts = CALL_ATTEMPTS) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(`${API}/${method}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+        // Длинное ожидание висит до 30 секунд, поэтому запас сверху
+        signal: AbortSignal.timeout(60_000),
+      })
+
+      const data = await response.json()
+      if (!data.ok) {
+        const error = new Error(`${method}: ${data.description || response.status}`)
+        error.fromTelegram = true
+        throw error
+      }
+      return data.result
+    } catch (error) {
+      if (!shouldRetry(error, attempt, attempts)) throw error
+      await sleep(400 * attempt)
+    }
+  }
 }
 
 function send(chatId, text, keyboard = null) {

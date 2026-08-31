@@ -23,6 +23,10 @@ export function loadEnv() {
   if (loaded) return
   loaded = true
 
+  // Тестам нужен чистый набор переменных: личный .env с кодами доступа
+  // и потолками менял бы поведение по умолчанию, и проверить его было бы нечем.
+  if (process.env.REVIZOR_SKIP_ENV) return
+
   const file = path.join(root, '.env')
   if (!existsSync(file)) return
 

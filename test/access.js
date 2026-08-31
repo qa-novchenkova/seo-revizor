@@ -8,6 +8,8 @@
  */
 import assert from 'node:assert/strict'
 
+process.env.REVIZOR_SKIP_ENV = '1'
+
 const today = new Date().toISOString().slice(0, 10)
 const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 

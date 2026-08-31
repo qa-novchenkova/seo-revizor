@@ -8,7 +8,13 @@
  */
 import assert from 'node:assert/strict'
 
-import {
+// Тест не должен зависеть от личного .env: там могут стоять коды доступа
+// и потолки, и тогда поведение по умолчанию не проверить.
+process.env.REVIZOR_SKIP_ENV = '1'
+
+// Импорт динамический намеренно: обычный import выполняется раньше строк
+// выше него, и выключатель .env не успел бы подействовать.
+const {
   parseSite,
   checkLimits,
   spend,
@@ -23,7 +29,7 @@ import {
   accessState,
   checkGlobalLimit,
   resetAccess,
-} from '../src/bot.js'
+} = await import('../src/bot.js')
 
 console.log('\n  Проверка бота\n')
 

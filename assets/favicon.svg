@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!--
+    Значок вкладки. Рисунок намеренно проще аватара: на 16 пикселях
+    тонкая обводка, сетка и градиенты сливаются в пятно, поэтому здесь
+    только силуэт щита и вырезанная в нём галочка.
+  -->
+  <rect width="64" height="64" rx="14" fill="#0C201E"/>
+  <path d="M32 11 L51 18 v18c0 12-9 19-19 23-10-4-19-11-19-23V18z" fill="#4FD1C3"/>
+  <path d="M23 33 l7 7 13-16" fill="none" stroke="#0C201E" stroke-width="6"
+        stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

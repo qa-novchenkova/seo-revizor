@@ -69,8 +69,7 @@ const HELLO = [
   '',
   'Пришлите адрес, например: https://example.com',
   '',
-  'По ходу работы я показываю, что именно смотрю, а в конце присылаю',
-  'отчёт файлом: что не так, чем вредит, как исправить.',
+  'По ходу работы я показываю, что именно смотрю, а в конце присылаю отчёт файлом: что не так, чем вредит, как исправить.',
 ].join('\n')
 
 /** Кнопки под приветствием: три вещи, которые спрашивают чаще всего. */
@@ -349,13 +348,24 @@ async function runAudit(job, notice) {
     if (!force && Date.now() - lastEdit < 2000) return
     lastEdit = Date.now()
 
-    const lines = [`Проверяю ${site}`, '', ...done.slice(-8).map((line) => '· ' + line)]
+    const lines = [`Проверяю ${site}`, '', ...done.slice(-14).map(line)]
     await edit(chatId, progress.message_id, lines.join('\n')).catch(() => {})
   }
 
+  // Время каждого шага: по нему видно, какая проверка тормозит,
+  // и что работа идёт, а не зависла
   const onStep = (event) => {
     if (event.type === 'call') {
-      done.push(describeCall(event))
+      done.push({ text: describeCall(event, site), startedAt: Date.now() })
+      show()
+    }
+
+    if (event.type === 'result') {
+      const step = done[done.length - 1]
+      if (step && !step.ms) {
+        step.ms = Date.now() - step.startedAt
+        step.failed = event.ok === false
+      }
       show()
     }
   }
@@ -363,8 +373,7 @@ async function runAudit(job, notice) {
   // Один и тот же вызов для обоих режимов: наружу они отдают одинаковый прогон
   const result = HAS_MODEL ? await audit(site, { onStep }) : await runDirect(site, { onStep })
 
-  const minutes = Math.max(1, Math.round((Date.now() - started) / 60_000))
-  done.push(`готово за ${minutes} мин`)
+  done.push({ text: `готово за ${seconds(Date.now() - started)}`, ms: 0, done: true })
   await show(true)
 
   // ── отчёт ────────────────────────────────────────────────────────────────
@@ -386,8 +395,30 @@ async function runAudit(job, notice) {
   console.log(`${site}: находок ${result.findings.length}, вызовов ${result.calls.length}`)
 }
 
-/** Короткая строка о том, что сейчас делает агент. */
-export function describeCall(event) {
+/** Строка шага: что делаем и сколько это заняло. */
+export function line(step) {
+  if (step.done) return step.text
+  if (step.failed) return `· ${step.text} — не отработал`
+  if (!step.ms) return `· ${step.text} …`
+  return `· ${step.text} — ${seconds(step.ms)}`
+}
+
+/** Длительность человеческими словами. */
+export function seconds(ms) {
+  if (ms < 1000) return '<1 с'
+  if (ms < 60_000) return `${Math.round(ms / 1000)} с`
+
+  const minutes = Math.floor(ms / 60_000)
+  const rest = Math.round((ms % 60_000) / 1000)
+  return rest ? `${minutes} мин ${rest} с` : `${minutes} мин`
+}
+
+/**
+ * Короткая строка о том, что сейчас делает агент.
+ * Домен не повторяем на каждой строке: он уже назван в шапке сообщения,
+ * а места в списке мало. Остаётся только путь, и то если он не корневой.
+ */
+export function describeCall(event, site = '') {
   const names = {
     check_url: 'код ответа',
     check_meta: 'мета-теги',
@@ -403,8 +434,26 @@ export function describeCall(event) {
   }
 
   const what = names[event.name] || event.name
-  const where = event.input?.url ? ` — ${short(event.input.url)}` : ''
-  return what + where
+  const where = placeOf(event.input?.url, site)
+  return where ? `${what} ${where}` : what
+}
+
+/** Путь страницы внутри проверяемого сайта; для чужого домена — имя домена. */
+function placeOf(url, site) {
+  if (!url) return ''
+
+  try {
+    const page = new URL(url)
+    const host = site ? new URL(site).hostname : page.hostname
+    if (page.hostname !== host) return page.hostname
+    return page.pathname === '/' ? '' : cut(page.pathname, 28)
+  } catch {
+    return ''
+  }
+}
+
+function cut(text, max) {
+  return text.length > max ? text.slice(0, max - 1) + '…' : text
 }
 
 /** Итог проверки одним сообщением: без него придётся открывать файл ради цифры. */
@@ -449,15 +498,6 @@ function safeHost(site) {
   }
 }
 
-function short(url) {
-  try {
-    const parsed = new URL(url)
-    const tail = parsed.pathname === '/' ? '' : parsed.pathname
-    return parsed.hostname + (tail.length > 24 ? tail.slice(0, 23) + '…' : tail)
-  } catch {
-    return url
-  }
-}
 
 // ── общение с Telegram ───────────────────────────────────────────────────────
 

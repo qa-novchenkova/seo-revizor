@@ -17,7 +17,7 @@
  *
  *   npm run site
  */
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -71,6 +71,15 @@ const html = page()
 mkdirSync(path.join(root, 'docs'), { recursive: true })
 writeFileSync(path.join(root, 'docs/index.html'), html, 'utf8')
 
+// Значки лежат в assets и копируются рядом со страницей: docs собирается
+// заново при каждом коммите, поэтому держать их только там нельзя.
+for (const [from, to] of [
+  ['assets/favicon.svg', 'docs/favicon.svg'],
+  ['assets/bot-avatar.png', 'docs/icon.png'],
+]) {
+  copyFileSync(path.join(root, from), path.join(root, to))
+}
+
 console.log(`  docs/index.html собран, ${Math.round(html.length / 1024)} КБ`)
 console.log(`  инструментов ${TOOLS.length}, правил ${rules.length}, проверок ${checks.length}`)
 
@@ -87,6 +96,9 @@ function page() {
 <meta property="og:title" content="ИИ-агент «Ревизор» — умный технический аудит сайтов">
 <meta property="og:description" content="Автоматический аудит сайта по ${checks.length} критериям через протокол MCP. Находит SEO-ошибки, уязвимости и наглядно сравнивает отчёты после обновлений.">
 <meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.png">
+<meta name="theme-color" content="#0A1614">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>${style()}</style>

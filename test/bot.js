@@ -8,7 +8,7 @@
  */
 import assert from 'node:assert/strict'
 
-import { parseSite, checkLimits, spend, resetLimits, describeCall, summary } from '../src/bot.js'
+import { parseSite, checkLimits, spend, resetLimits, describeCall, summary, line, seconds } from '../src/bot.js'
 
 console.log('\n  Проверка бота\n')
 
@@ -57,13 +57,40 @@ console.log('  ✓ лимиты не общие, а по пользовател�
 
 // ── что видит человек по ходу проверки ───────────────────────────────────────
 
+const site = 'https://example.com/'
+
 assert.equal(
-  describeCall({ name: 'check_robots', input: { url: 'https://example.com/' } }),
-  'robots.txt — example.com',
+  describeCall({ name: 'check_robots', input: { url: site } }, site),
+  'robots.txt',
+  'на главной путь не пишем: он ничего не добавляет',
 )
-assert.equal(describeCall({ name: 'check_content', input: {} }), 'контент и дубли')
-assert.equal(describeCall({ name: 'неизвестный', input: {} }), 'неизвестный', 'новый инструмент не ломает вывод')
-console.log('  ✓ шаги подписаны по-русски, неизвестный инструмент не ломает вывод')
+assert.equal(
+  describeCall({ name: 'check_meta', input: { url: 'https://example.com/legal/offer' } }, site),
+  'мета-теги /legal/offer',
+  'домен не повторяем на каждой строке, остаётся путь',
+)
+assert.equal(
+  describeCall({ name: 'check_url', input: { url: 'https://other.com/page' } }, site),
+  'код ответа other.com',
+  'чужой домен нужно называть целиком',
+)
+assert.equal(describeCall({ name: 'check_content', input: {} }, site), 'контент и дубли')
+assert.equal(describeCall({ name: 'неизвестный', input: {} }, site), 'неизвестный', 'новый инструмент не ломает вывод')
+console.log('  ✓ шаги подписаны по-русски, домен не дублируется в каждой строке')
+
+// ── время шагов ──────────────────────────────────────────────────────────────
+
+assert.equal(seconds(400), '<1 с')
+assert.equal(seconds(2400), '2 с')
+assert.equal(seconds(65_000), '1 мин 5 с')
+assert.equal(seconds(120_000), '2 мин')
+console.log('  ✓ длительность пишется словами, без долей секунды')
+
+assert.equal(line({ text: 'скорость' }), '· скорость …', 'пока шаг идёт, у него многоточие')
+assert.equal(line({ text: 'скорость', ms: 41_000 }), '· скорость — 41 с')
+assert.equal(line({ text: 'скорость', ms: 900, failed: true }), '· скорость — не отработал')
+assert.equal(line({ text: 'готово за 2 мин', done: true }), 'готово за 2 мин', 'итоговая строка без точки списка')
+console.log('  ✓ строка шага показывает ход, длительность и сбой')
 
 // ── итог ─────────────────────────────────────────────────────────────────────
 

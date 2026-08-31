@@ -19,7 +19,10 @@ const CANDIDATES = [
   'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/snap/bin/chromium',
 ].filter(Boolean)
 
 /** Возвращает путь к браузеру или null, если не нашли. */

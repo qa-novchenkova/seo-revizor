@@ -21,7 +21,10 @@ import { pathToFileURL } from 'node:url'
 import { loadEnv } from './lib/env.js'
 import { audit } from './agent.js'
 import { runDirect } from './direct.js'
-import { toMarkdown } from './report.js'
+import { readFileSync } from 'node:fs'
+
+import { toMarkdown, toHtml } from './report.js'
+import { htmlToPdf, findBrowser } from './pdf.js'
 import { saveRun, previousRun, compare } from './store.js'
 import { SEVERITY_LABELS, SEVERITIES } from './rules/index.js'
 import { checkSpeed } from './checks/speed.js'
@@ -86,21 +89,48 @@ const ADMINS = (process.env.TELEGRAM_ADMINS || '')
 const HELLO = [
   'Ревизор — технический аудит сайта.',
   '',
-  'Пришлите адрес, например: https://example.com',
+  'Пришлите адрес, например: example.com',
   '',
   'По ходу работы я показываю, что именно смотрю, а в конце присылаю отчёт файлом: что не так, чем вредит, как исправить.',
+  '',
+  `Полный чек-лист: ${SITE}`,
 ].join('\n')
 
-/** Кнопки под приветствием: три вещи, которые спрашивают чаще всего. */
-const MENU = {
-  inline_keyboard: [
-    [
-      { text: 'Что проверяется', callback_data: 'help' },
-      { text: 'Мои лимиты', callback_data: 'limits' },
-    ],
-    [{ text: 'Полный чек-лист на сайте', url: SITE }],
+/**
+ * Постоянная клавиатура над полем ввода.
+ *
+ * Кнопки под сообщением уезжают вверх вместе с перепиской, а эти остаются
+ * на месте всегда. Ссылку сюда положить нельзя — такие кнопки умеют только
+ * отправлять свой текст, поэтому адрес сайта живёт в самих подсказках.
+ */
+const KEYS = {
+  keyboard: [
+    [{ text: 'Что проверяется' }, { text: 'Мои лимиты' }],
+    [{ text: 'Быстрые проверки' }],
   ],
+  resize_keyboard: true,
+  is_persistent: true,
+  input_field_placeholder: 'Адрес сайта, например example.com',
 }
+
+/** Тексты кнопок совпадают с командами: нажатие приходит обычным сообщением. */
+const BUTTONS = {
+  'Что проверяется': () => HELP,
+  'Быстрые проверки': () => QUICK_HELP,
+}
+
+const QUICK_HELP = [
+  'Быстрые проверки — перепроверить одно место, не гоняя весь аудит:',
+  '',
+  '/speed адрес — скорость и Core Web Vitals',
+  '/security адрес — сертификат, заголовки, служебные файлы',
+  '/robots адрес — robots.txt и карта сайта',
+  '/meta адрес — мета-теги конкретной страницы',
+  '',
+  'Например: /speed example.com',
+  '',
+  'Отвечают за секунды и на полный аудит не расходуются.',
+].join('\n')
 
 /** Команды, которые бот сам прописывает себе при запуске. */
 const COMMANDS = [
@@ -118,8 +148,7 @@ const ABOUT = 'Технический аудит сайта: индексаци�
 const DESCRIPTION = [
   'Пришлите адрес сайта — получите отчёт: что не так, чем это вредит и как исправить.',
   '',
-  'Проверяются индексация и robots.txt, зеркала и дубли, мета-теги и заголовки,',
-  'внутренние ссылки, безопасность, аналитика, дубли контента и скорость загрузки.',
+  'Проверяются индексация и robots.txt, зеркала и дубли, мета-теги и заголовки, внутренние ссылки, безопасность, аналитика, дубли контента и скорость загрузки.',
 ].join('\n')
 
 const HELP = [
@@ -135,8 +164,7 @@ const HELP = [
   '· скорость и Core Web Vitals',
   '',
   '',
-  'Пришлите адрес — проверю всё сразу. Если нужно перепроверить одно место',
-  'после правки, есть быстрые команды:',
+  'Пришлите адрес — проверю всё сразу. Если нужно перепроверить одно место после правки, есть быстрые команды:',
   '',
   '/speed адрес — скорость и Core Web Vitals',
   '/security адрес — сертификат, заголовки, служебные файлы',
@@ -254,9 +282,14 @@ async function handleMessage(message) {
 
   if (!text) return
 
-  if (text.startsWith('/start')) return void (await send(chatId, HELLO, MENU))
+  if (text.startsWith('/start')) return void (await send(chatId, HELLO, KEYS))
   if (text.startsWith('/help')) return void (await send(chatId, HELP))
-  if (text.startsWith('/limits')) return void (await send(chatId, limitsFor(userId)))
+  if (text.startsWith('/limits') || text === 'Мои лимиты') {
+    return void (await send(chatId, limitsFor(userId)))
+  }
+
+  // Нажатие на постоянную кнопку приходит обычным сообщением с её текстом
+  if (BUTTONS[text]) return void (await send(chatId, BUTTONS[text]()))
 
   // Быстрая проверка: /speed адрес
   const quick = text.match(/^\/(\w+)/)
@@ -514,9 +547,17 @@ async function runAudit(job, notice) {
   const previous = previousRun(site)
   const diff = previous ? compare(result, previous) : null
   const markdown = toMarkdown(result, diff)
-  saveRun(result, { md: markdown })
+  const saved = saveRun(result, { md: markdown, html: toHtml(result, diff) })
 
-  await sendDocument(chatId, markdown, fileNameFor(site), summary(result, diff))
+  const caption = summary(result, diff)
+  const name = fileNameFor(site)
+  const pdf = await makePdf(saved)
+
+  if (pdf) {
+    await sendDocument(chatId, pdf, name + '.pdf', caption, 'application/pdf')
+  } else {
+    await sendDocument(chatId, markdown, name + '.md', caption, 'text/markdown')
+  }
 
   if (ADMINS.includes(userId) && result.usage.cost !== null) {
     await send(
@@ -619,9 +660,30 @@ export function summary(result, diff) {
   return lines.join('\n')
 }
 
+/**
+ * Печатает отчёт в PDF, если на машине есть браузер.
+ *
+ * Своего браузера проект не носит: печать делает уже установленный Chrome
+ * ключом --print-to-pdf. На сервере его может не быть, поэтому отсутствие
+ * браузера не ошибка — просто уйдёт Markdown.
+ */
+async function makePdf(saved) {
+  if (!findBrowser() || !saved.files.html) return null
+
+  const target = `${saved.base}.pdf`
+  const result = await htmlToPdf(saved.files.html, target)
+
+  if (!result.ok) {
+    console.error('PDF не собрался:', result.reason)
+    return null
+  }
+
+  return readFileSync(target)
+}
+
 function fileNameFor(site) {
   const host = safeHost(site)
-  return `revizor-${host}-${new Date().toISOString().slice(0, 10)}.md`
+  return `revizor-${host}-${new Date().toISOString().slice(0, 10)}`
 }
 
 function safeHost(site) {
@@ -668,11 +730,11 @@ function edit(chatId, messageId, text) {
 }
 
 /** Отчёт уходит файлом: в сообщение он не помещается, лимит около 4000 знаков. */
-async function sendDocument(chatId, content, fileName, caption) {
+async function sendDocument(chatId, content, fileName, caption, mime = 'text/markdown') {
   const form = new FormData()
   form.append('chat_id', String(chatId))
   form.append('caption', caption.slice(0, 1000))
-  form.append('document', new Blob([content], { type: 'text/markdown' }), fileName)
+  form.append('document', new Blob([content], { type: mime }), fileName)
 
   const response = await fetch(`${API}/sendDocument`, {
     method: 'POST',

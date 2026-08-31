@@ -261,6 +261,8 @@ export function matchCode(text) {
 /** Пускать ли этого человека к проверкам. */
 export function accessState(userId, text = '') {
   if (ALLOWED.length && !ALLOWED.includes(userId)) return 'closed'
+  // Владелец бота код не вводит: иначе смена кодов запирает его самого.
+  if (ADMINS.includes(userId)) return 'open'
   if (!ACCESS_CODES.length) return 'open'
   if (unlocked.has(userId)) return 'open'
   return matchCode(text) ? 'code' : 'locked'

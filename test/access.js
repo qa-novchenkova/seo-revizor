@@ -13,6 +13,7 @@ const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 
 process.env.BOT_ACCESS_CODE = `битрикс24, сеоджаз:${today}, прошлый:${yesterday}`
 process.env.BOT_GLOBAL_DAILY_LIMIT = '3'
+process.env.TELEGRAM_ADMINS = '275908274'
 
 const { accessState, matchCode, checkGlobalLimit, spendGlobal, resetAccess, describeUser } =
   await import('../src/bot.js')
@@ -39,6 +40,9 @@ assert.equal(accessState('чужой', 'привет'), 'locked', 'без код
 assert.equal(accessState('чужой', 'https://example.com'), 'locked', 'адрес кодом не является')
 assert.equal(accessState('гость', 'битрикс24'), 'code', 'верный код открывает доступ')
 console.log('  ✓ без кода бот не пускает, с кодом открывается')
+
+assert.equal(accessState('275908274', 'привет'), 'open', 'владелец бота кода не вводит')
+console.log('  ✓ владельца бота коды не запирают')
 
 // ── кто пришёл ───────────────────────────────────────────────────────────────
 

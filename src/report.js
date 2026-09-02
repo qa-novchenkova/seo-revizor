@@ -8,6 +8,7 @@
  * которые агент собрал из ответов инструментов.
  */
 import { SEVERITIES, SEVERITY_LABELS } from './rules/index.js'
+import { plural, FORMS } from './lib/text.js'
 
 const TITLE = 'Аудит сайта'
 
@@ -64,7 +65,10 @@ export function toMarkdown(run, diff = null) {
   if (diff) {
     lines.push('## Что изменилось с прошлой проверки')
     lines.push('')
-    lines.push(`Сравнение с ${formatDate(diff.previousAt)} по ${diff.comparedPages.length} общим страницам.`)
+    lines.push(
+      `Сравнение с ${formatDate(diff.previousAt)} по ` +
+        `${diff.comparedPages.length} ${plural(diff.comparedPages.length, FORMS.pageCommon)}.`,
+    )
     lines.push('')
     lines.push(`- Исправлено: ${diff.fixed.length}`)
     lines.push(`- Появилось нового: ${diff.appeared.length}`)
@@ -212,7 +216,7 @@ export function toHtml(run, diff = null) {
     : `
     <section class="section">
       <h2>Что изменилось</h2>
-      <p class="muted">Сравнение с проверкой от ${formatDate(diff.previousAt)} по ${diff.comparedPages.length} общим страницам.</p>
+      <p class="muted">Сравнение с проверкой от ${formatDate(diff.previousAt)} по ${diff.comparedPages.length} ${plural(diff.comparedPages.length, FORMS.pageCommon)}.</p>
       <dl class="stats">
         ${stat('Исправлено', diff.fixed.length, 'good')}
         ${stat('Появилось', diff.appeared.length, diff.appeared.length ? 'critical' : 'plain')}

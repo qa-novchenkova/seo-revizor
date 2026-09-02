@@ -151,3 +151,14 @@ console.log('  ✓ разметка заключения превращаетс�
 // Чужие теги в тексте модели остаются текстом, а не разметкой.
 assert.match(paragraphs('Тег <script>alert(1)</script> в тексте'), /&lt;script&gt;/)
 console.log('  ✓ посторонние теги экранируются')
+
+
+// ── согласование числа в сравнении ───────────────────────────────────────────
+
+import { plural, FORMS } from '../src/lib/text.js'
+
+assert.equal(plural(1, FORMS.pageCommon), 'общей странице', 'по 1 общей странице')
+assert.equal(plural(3, FORMS.pageCommon), 'общим страницам', 'по 3 общим страницам')
+assert.equal(plural(11, FORMS.pageCommon), 'общим страницам')
+assert.equal(plural(21, FORMS.pageCommon), 'общей странице', 'по 21 общей странице')
+console.log('  ✓ строка сравнения согласуется с числом страниц')

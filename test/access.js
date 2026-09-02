@@ -15,7 +15,8 @@ const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 
 process.env.BOT_ACCESS_CODE = `первое-слово, второе-слово:${today}, прошлый:${yesterday}`
 process.env.BOT_GLOBAL_DAILY_LIMIT = '3'
-process.env.TELEGRAM_ADMINS = '275908274'
+// Выдуманный идентификатор: настоящим в репозитории не место.
+process.env.TELEGRAM_ADMINS = 'admin-000'
 
 const { accessState, matchCode, checkGlobalLimit, spendGlobal, resetAccess, describeUser } =
   await import('../src/bot.js')
@@ -43,7 +44,7 @@ assert.equal(accessState('чужой', 'https://example.com'), 'locked', 'адр
 assert.equal(accessState('гость', 'первое-слово'), 'code', 'верный код открывает доступ')
 console.log('  ✓ без кода бот не пускает, с кодом открывается')
 
-assert.equal(accessState('275908274', 'привет'), 'open', 'владелец бота кода не вводит')
+assert.equal(accessState('admin-000', 'привет'), 'open', 'владелец бота кода не вводит')
 console.log('  ✓ владельца бота коды не запирают')
 
 // ── кто пришёл ───────────────────────────────────────────────────────────────

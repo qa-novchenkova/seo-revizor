@@ -151,7 +151,7 @@ function hero() {
 
       <p class="cta">
         <a class="btn btn--main" href="${REPO}">${icon('github')} Открыть код</a>
-        <a class="btn btn--ghost" href="${BOT_URL}">${icon('send')} Бот в телеграме</a>
+        <a class="btn btn--ghost" href="#bot">${icon('send')} Телеграм-бот</a>
         <a class="btn btn--ghost" href="#checklist">${icon('rules')} Смотреть чек-лист</a>
       </p>
     </div>

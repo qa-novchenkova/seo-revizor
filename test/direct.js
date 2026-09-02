@@ -52,7 +52,7 @@ console.log(`  Вызовов: ${run.calls.length}, страниц: ${run.pages.
 console.log(`  Находок: ${run.findings.length}${parts.length ? ' (' + parts.join(', ') + ')' : ''}`)
 
 if (diff) {
-  console.log(`  С прошлой проверки: исправлено ${diff.fixed.length}, новых ${diff.added.length}`)
+  console.log(`  С прошлой проверки: исправлено ${diff.fixed.length}, новых ${diff.appeared.length}`)
 }
 
 console.log(`\n  Отчёт: ${saved.files.md}\n`)

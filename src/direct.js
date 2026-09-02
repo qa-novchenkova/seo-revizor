@@ -66,19 +66,27 @@ export async function runDirect(site, options = {}) {
   const mapAddress = robots?.sitemaps?.[0] || site
   const sitemap = await step('check_sitemap', { url: mapAddress }, () => checkSitemap(mapAddress))
 
-  // Выборка: по одной странице каждого типа. Если карты нет, остаётся главная.
-  const sample = (sitemap?.sample || []).map((page) => page.url).filter(Boolean)
-  const chosen = [site, ...sample.filter((url) => url !== site)].slice(0, PAGES_TO_CHECK)
+  // ── 4. ссылки с главной ───────────────────────────────────────────────────
+  // Идут до поштучных проверок намеренно: на сайте без карты только отсюда
+  // и можно узнать, какие страницы вообще есть.
+  const links = await step('check_links', { url: site }, () => checkLinks(site))
+
+  // Выборка: по одной странице каждого типа. Сначала карта сайта, если она
+  // есть; иначе внутренние ссылки с главной. Совсем без выборки проверять
+  // было бы нечего, кроме самой главной.
+  const fromMap = (sitemap?.sample || []).map((page) => page.url).filter(Boolean)
+  const sample = (fromMap.length ? fromMap : links?.internal?.sample || []).filter(
+    (url) => url !== site,
+  )
+
+  const chosen = [site, ...sample].slice(0, PAGES_TO_CHECK)
   for (const url of chosen) pages.add(url)
 
-  // ── 4. коды ответа и мета-теги выбранных страниц ──────────────────────────
+  // ── 5. коды ответа и мета-теги выбранных страниц ──────────────────────────
   for (const url of chosen) {
     await step('check_url', { url }, () => checkUrl(url))
     await step('check_meta', { url }, () => checkMeta(url))
   }
-
-  // ── 5. ссылки с главной ───────────────────────────────────────────────────
-  await step('check_links', { url: site }, () => checkLinks(site))
 
   // ── 6. безопасность: одного вызова на сайт достаточно ─────────────────────
   await step('check_security', { url: site }, () => checkSecurity(site))
@@ -89,7 +97,7 @@ export async function runDirect(site, options = {}) {
   )
 
   // ── 8. контент: работает только на наборе страниц ─────────────────────────
-  const forContent = [site, ...sample.filter((url) => url !== site)].slice(0, 6)
+  const forContent = [site, ...sample].slice(0, 6)
   if (forContent.length > 1) {
     await step('check_content', { urls: forContent }, () => checkContent(forContent))
     for (const url of forContent) pages.add(url)
@@ -111,7 +119,9 @@ export async function runDirect(site, options = {}) {
     pages: [...pages],
     calls,
     stoppedBy: 'end_turn',
-    usage: { inputTokens: 0, outputTokens: 0, cost: 0 },
+    // Стоимости нет, а не «ноль»: обращений к модели не было вовсе,
+    // и строка «примерно $0.00» только сбивала бы с толку.
+    usage: { inputTokens: 0, outputTokens: 0, cost: null },
   }
 }
 

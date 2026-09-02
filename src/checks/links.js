@@ -170,6 +170,26 @@ export async function checkLinks(startUrl, options = {}) {
     .map(([shape, total]) => ({ shape, total }))
     .sort((a, b) => b.total - a.total)
 
+  // Выборка живых внутренних страниц: по одной на каждую форму адреса.
+  // Нужна тем, кто идёт дальше и смотрит страницы поштучно — прогону без
+  // модели и самой модели. Без неё на сайте без карты проверять нечего,
+  // кроме главной.
+  const seenShapes = new Set()
+  const sample = []
+  for (const [url, item] of internalLinks) {
+    if (url === normalize(startUrl)) continue
+    if (item.nofollow) continue
+
+    const status = statuses.find((entry) => entry.url === url)
+    if (status && (status.status === null || status.status >= 400)) continue
+
+    const shape = shapeOf(url)
+    if (seenShapes.has(shape)) continue
+    seenShapes.add(shape)
+    sample.push(url)
+    if (sample.length >= 5) break
+  }
+
   // ── замечания ─────────────────────────────────────────────────────────────
   if (internalLinks.length === 0) {
     found.add('links-none')
@@ -229,6 +249,7 @@ export async function checkLinks(startUrl, options = {}) {
       broken: broken.map((item) => ({ url: item.url, status: item.status })),
       redirects: redirected.map((item) => ({ url: item.url, to: item.location })),
       throttled: throttled.filter((item) => item.internal).map((item) => item.url),
+      sample,
     },
     external: {
       total: externalLinks.length,

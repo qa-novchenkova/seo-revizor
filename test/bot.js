@@ -28,6 +28,7 @@ const {
   spendQuick,
   accessState,
   pagesLine,
+  stepFor,
   checkGlobalLimit,
   resetAccess,
   shouldRetry,
@@ -105,6 +106,26 @@ assert.equal(line({ text: 'скорость', ms: 41_000 }), '· скорост�
 assert.equal(line({ text: 'скорость', ms: 900, failed: true }), '· скорость — не отработал')
 assert.equal(line({ text: 'готово за 2 мин', done: true }), 'готово за 2 мин', 'итоговая строка без точки списка')
 console.log('  ✓ строка шага показывает ход, длительность и сбой')
+
+// Один инструмент вызывается по нескольку раз — для разных страниц.
+// Строка при этом остаётся одна, а время складывается.
+const steps = []
+const first = stepFor(steps, 'мета-теги')
+first.ms = 400
+const second = stepFor(steps, 'мета-теги')
+second.ms += 600
+stepFor(steps, 'скорость').ms = 12_000
+
+assert.equal(steps.length, 2, 'повторный вызов не заводит вторую строку')
+assert.equal(second, first, 'это одна и та же строка')
+assert.equal(first.ms, 1000, 'время складывается')
+assert.equal(line({ text: 'мета-теги', ms: 1000 }), '· мета-теги — 1 с')
+assert.equal(
+  line({ text: 'мета-теги', ms: 1000, startedAt: Date.now() }),
+  '· мета-теги …',
+  'пока идёт повторный вызов, старое время не показываем',
+)
+console.log('  ✓ повторные вызовы одного инструмента идут одной строкой')
 
 // ── итог ─────────────────────────────────────────────────────────────────────
 

@@ -701,17 +701,21 @@ async function runAudit(job, notice) {
 
   // Время каждого шага: по нему видно, какая проверка тормозит,
   // и что работа идёт, а не зависла
+  let running = null
+
   const onStep = (event) => {
     if (event.type === 'call') {
-      done.push({ text: describeCall(event, site), startedAt: Date.now() })
+      running = stepFor(done, describeCall(event, site))
+      running.startedAt = Date.now()
       show()
     }
 
     if (event.type === 'result') {
-      const step = done[done.length - 1]
-      if (step && !step.ms) {
-        step.ms = Date.now() - step.startedAt
-        step.failed = event.ok === false
+      if (running) {
+        running.ms += Date.now() - running.startedAt
+        running.failed = running.failed || event.ok === false
+        running.startedAt = null
+        running = null
       }
       show()
     }
@@ -766,8 +770,26 @@ async function runAudit(job, notice) {
 export function line(step) {
   if (step.done) return step.text
   if (step.failed) return `· ${step.text} — не отработал`
-  if (!step.ms) return `· ${step.text} …`
+  // startedAt стоит, пока вызов идёт. У повторного вызова время с прошлого
+  // раза уже есть, но показывать его рано: проверка ещё не закончилась.
+  if (step.startedAt || !step.ms) return `· ${step.text} …`
   return `· ${step.text} — ${seconds(step.ms)}`
+}
+
+/**
+ * Строка хода для очередного вызова.
+ *
+ * Один и тот же инструмент вызывается по нескольку раз — для разных страниц.
+ * Три одинаковых строки подряд выглядят как сбой, поэтому строка остаётся
+ * одна, а время складывается.
+ */
+export function stepFor(done, text) {
+  const found = done.find((item) => item.text === text && !item.done)
+  if (found) return found
+
+  const entry = { text, ms: 0 }
+  done.push(entry)
+  return entry
 }
 
 /** Длительность человеческими словами. */

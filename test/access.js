@@ -13,7 +13,7 @@ process.env.REVIZOR_SKIP_ENV = '1'
 const today = new Date().toISOString().slice(0, 10)
 const yesterday = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10)
 
-process.env.BOT_ACCESS_CODE = `битрикс24, сеоджаз:${today}, прошлый:${yesterday}`
+process.env.BOT_ACCESS_CODE = `маяк, компас:${today}, прошлый:${yesterday}`
 process.env.BOT_GLOBAL_DAILY_LIMIT = '3'
 process.env.TELEGRAM_ADMINS = '275908274'
 
@@ -26,13 +26,13 @@ resetAccess()
 
 // ── несколько кодов ──────────────────────────────────────────────────────────
 
-assert.equal(matchCode('битрикс24')?.code, 'битрикс24', 'код без даты работает всегда')
-assert.equal(matchCode('сеоджаз')?.code, 'сеоджаз', 'код действует в последний свой день')
+assert.equal(matchCode('маяк')?.code, 'маяк', 'код без даты работает всегда')
+assert.equal(matchCode('компас')?.code, 'компас', 'код действует в последний свой день')
 assert.equal(matchCode('прошлый'), null, 'вчерашний код уже не пускает')
 assert.equal(matchCode('чужое слово'), null)
 console.log('  ✓ кодов может быть несколько, просроченный не работает')
 
-assert.equal(matchCode(' Битрикс24 ')?.code, 'битрикс24', 'регистр и пробелы не мешают')
+assert.equal(matchCode(' Маяк ')?.code, 'маяк', 'регистр и пробелы не мешают')
 assert.equal(matchCode(''), null, 'пустая строка кодом не является')
 console.log('  ✓ код принимается независимо от регистра и пробелов')
 
@@ -40,7 +40,7 @@ console.log('  ✓ код принимается независимо от ре�
 
 assert.equal(accessState('чужой', 'привет'), 'locked', 'без кода посторонний не проходит')
 assert.equal(accessState('чужой', 'https://example.com'), 'locked', 'адрес кодом не является')
-assert.equal(accessState('гость', 'битрикс24'), 'code', 'верный код открывает доступ')
+assert.equal(accessState('гость', 'маяк'), 'code', 'верный код открывает доступ')
 console.log('  ✓ без кода бот не пускает, с кодом открывается')
 
 assert.equal(accessState('275908274', 'привет'), 'open', 'владелец бота кода не вводит')

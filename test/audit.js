@@ -12,6 +12,7 @@
 
 import { loadEnv } from '../src/lib/env.js'
 import { audit, consoleReporter } from '../src/agent.js'
+import { money } from '../src/lib/text.js'
 import { toMarkdown, toHtml } from '../src/report.js'
 import { saveRun, previousRun, compare } from '../src/store.js'
 import { htmlToPdf, findBrowser } from '../src/pdf.js'
@@ -95,7 +96,9 @@ if (diff) {
 console.log(
   `  вызовов: ${result.calls.length} · время: ${seconds} с · ` +
     `токенов: ${result.usage.inputTokens} на вход, ${result.usage.outputTokens} на выход` +
-    (result.usage.cost !== null ? ` · примерно $${result.usage.cost.toFixed(3)}` : ''),
+    (result.usage.cost !== null
+      ? ` · примерно ${money(result.usage.cost, result.usage.currency, 3)}`
+      : ''),
 )
 
 if (result.stoppedBy === 'limit') {

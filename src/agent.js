@@ -157,6 +157,11 @@ export async function audit(site, options = {}) {
     new StdioClientTransport({
       command: process.execPath,
       args: [path.join(root, 'server.js')],
+      // Клиент MCP не передаёт серверу окружение целиком, а только безопасный
+      // список вроде PATH и HOME — и правильно делает. Но ключ для замера
+      // скорости серверу нужен, иначе проверка молча отвечает «ключа нет».
+      // Передаём ровно его: токен бота и ключ модели серверу ни к чему.
+      env: process.env.PAGESPEED_KEY ? { PAGESPEED_KEY: process.env.PAGESPEED_KEY } : undefined,
     }),
   )
 

@@ -29,6 +29,7 @@ import { toMarkdown, toHtml } from './report.js'
 import { htmlToPdf, findBrowser } from './pdf.js'
 import { saveRun, previousRun, compare } from './store.js'
 import { SEVERITY_LABELS, SEVERITIES } from './rules/index.js'
+import { money } from './lib/text.js'
 import { checkSpeed } from './checks/speed.js'
 import { checkSecurity } from './checks/security.js'
 import { checkRobots } from './checks/robots.js'
@@ -954,14 +955,6 @@ async function sendDocument(chatId, content, fileName, caption, mime = 'text/mar
 
 function reportFailure(error) {
   console.error('Сбой при разборе сообщения:', error)
-}
-
-/**
- * Деньги пишутся по обычаю своей валюты: доллар перед числом, рубль после.
- * Мелочь, но «$12.30 ₽» в отчёте выглядит ошибкой.
- */
-export function money(cost, currency = '$') {
-  return currency === '$' ? `$${cost.toFixed(2)}` : `${cost.toFixed(2)} ${currency}`
 }
 
 function sleep(ms) {

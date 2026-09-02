@@ -47,6 +47,7 @@ const PRICE = {
   'claude-opus-5': { input: 5, output: 25, currency: '$' },
   'claude-haiku-4-5': { input: 1, output: 5, currency: '$' },
   'anthropic/claude-haiku-4-5': { input: 135, output: 1080, currency: '₽' },
+  'anthropic/claude-sonnet-5': { input: 405, output: 2025, currency: '₽' },
   'anthropic/claude-sonnet-4-6': { input: 405, output: 2025, currency: '₽' },
   'anthropic/claude-opus-4-6': { input: 675, output: 3375, currency: '₽' },
   'anthropic/claude-opus-4-7': { input: 675, output: 3375, currency: '₽' },

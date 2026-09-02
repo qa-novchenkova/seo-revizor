@@ -27,21 +27,26 @@ if (!site) {
   process.exit(1)
 }
 
-if (!process.env.ANTHROPIC_API_KEY && !process.env.ANTHROPIC_AUTH_TOKEN) {
+const hasKey =
+  process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN || process.env.AI_GATEWAY_KEY
+
+if (!hasKey) {
   console.log(`
   Нужен ключ доступа к модели: агент обращается к ней на каждом круге.
 
-  Ключ берётся на console.anthropic.com, раздел API Keys.
-  Дальше в терминале, в той же сессии:
+  Путь первый — напрямую у Anthropic. Ключ берётся на console.anthropic.com,
+  раздел API Keys, и кладётся в .env:
 
-    export ANTHROPIC_API_KEY=sk-ant-...      (Git Bash)
-    $env:ANTHROPIC_API_KEY = "sk-ant-..."    (PowerShell)
+    ANTHROPIC_API_KEY=sk-ant-...
 
-  Один прогон стоит порядка нескольких центов. Модель можно сменить:
+  Путь второй — через OpenAI-совместимый шлюз, счёт в рублях:
 
-    export REVIZOR_MODEL=claude-haiku-4-5
+    AI_GATEWAY_KEY=...
+    AI_GATEWAY_URL=https://api.timeweb.ai/v1
+    REVIZOR_MODEL=anthropic/claude-haiku-4-5
 
   Проверить цикл без ключа и бесплатно: npm run loop
+  Проверить сайт без модели: node test/direct.js https://site.ru/
 `)
   process.exit(1)
 }

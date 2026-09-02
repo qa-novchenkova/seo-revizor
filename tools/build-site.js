@@ -27,6 +27,7 @@ import { icon, TOOL_ICONS, SECTION_ICONS, SECTION_TONES } from './icons.js'
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 const REPO = 'https://github.com/qa-novchenkova/seo-revizor'
+const BOT_URL = 'https://t.me/SeoRevizorBot'
 
 /** Как называется каждый вид проверки и что он означает. */
 const KINDS = {
@@ -120,6 +121,7 @@ ${orderSection()}
 ${checklistSection()}
 ${rulesSection()}
 ${glossarySection()}
+${botSection()}
 ${startSection()}
 </main>
 ${footer()}
@@ -236,6 +238,7 @@ function nav() {
     ['#checklist', 'Чек-листы', 'check'],
     ['#rules', 'Правила', 'content'],
     ['#glossary', 'Глоссарий', 'meta'],
+    ['#bot', 'Телеграм-бот', 'send'],
     ['#start', 'Запуск', 'code'],
   ]
 
@@ -680,6 +683,213 @@ function termItem(item) {
 
 // ── запуск ───────────────────────────────────────────────────────────────────
 
+// ── телеграм-бот ─────────────────────────────────────────────────────────────
+
+/**
+ * Переписка с ботом: строки проверок появляются одна за другой, затем
+ * приходят три файла отчёта. Рисуется в SVG, чтобы масштабировалась без
+ * потери резкости и не тянула за собой скриншот весом в мегабайт.
+ */
+function chatMock() {
+  const steps = [
+    ['зеркала', '2 с'],
+    ['robots.txt', '&lt;1 с'],
+    ['карта сайта', '&lt;1 с'],
+    ['ссылки', '2 с'],
+    ['мета-теги', '1 с'],
+    ['код ответа', '&lt;1 с'],
+    ['безопасность', '3 с'],
+    ['аналитика', '&lt;1 с'],
+    ['контент и дубли', '1 с'],
+    ['скорость', '9 с'],
+  ]
+
+  const rows = steps
+    .map(([name, time], i) => {
+      const y = 78 + i * 22
+      const wait = (0.45 + i * 0.28).toFixed(2)
+      return `<g class="chat__row" style="--at:${wait}s">
+      <text class="chat__dot" x="26" y="${y}">·</text>
+      <text class="chat__name" x="38" y="${y}">${name}</text>
+      <text class="chat__time" x="${38 + name.length * 7.6 + 10}" y="${y}">— ${time}</text>
+    </g>`
+    })
+    .join('')
+
+  const files = [
+    ['revizor-example.ru.pdf', '262 КБ', 'открыть и распечатать'],
+    ['revizor-example.ru.html', '64 КБ', 'посмотреть в браузере'],
+    ['revizor-example.ru.md', '40 КБ', 'положить в заметки'],
+  ]
+    .map(([name, size, hint], i) => {
+      const y = 392 + i * 50
+      const wait = (4.1 + i * 0.35).toFixed(2)
+      return `<g class="chat__file" style="--at:${wait}s">
+      <rect x="8" y="${y}" width="384" height="42" rx="12"/>
+      <rect class="chat__badge" x="22" y="${y + 9}" width="24" height="24" rx="7"/>
+      <path class="chat__badge-ico" d="M${30} ${y + 15}h8M30 ${y + 20}h8M30 ${y + 25}h5"/>
+      <text class="chat__file-name" x="58" y="${y + 19}">${name}</text>
+      <text class="chat__file-size" x="58" y="${y + 33}">${size} · ${hint}</text>
+    </g>`
+    })
+    .join('')
+
+  return `<div class="chat rise" aria-hidden="true">
+  <svg viewBox="0 0 400 546" fill="none">
+    <rect class="chat__bubble" x="8" y="8" width="384" height="366" rx="16"/>
+
+    <text class="chat__head" x="26" y="40">Проверяю </text>
+    <text class="chat__link" x="112" y="40">https://example.ru/</text>
+
+    ${rows}
+
+    <g class="chat__row" style="--at:3.4s">
+      <text class="chat__done" x="26" y="318">готово за 1 мин 5 с</text>
+    </g>
+    <g class="chat__row" style="--at:3.7s">
+      <text class="chat__pages" x="26" y="346">проверено на 5 страницах: /, /catalog, /about, /contacts, /policy</text>
+    </g>
+
+    ${files}
+  </svg>
+</div>`
+}
+
+function botSection() {
+  const keys = [
+    ['rules', 'Что проверяется', 'Полный перечень: индексация, зеркала, разметка, ссылки, безопасность, аналитика, контент, скорость.'],
+    ['check', 'Мои лимиты', 'Сколько проверок осталось сегодня и когда снимется пауза между запусками.'],
+    ['speed', 'Быстрые проверки', 'Перепроверить одно место после правки, не гоняя весь аудит.'],
+  ]
+    .map(
+      ([ic, title, text], i) => `<article class="key rise" style="--wait:${i * 80}ms">
+      ${icon(ic, 'key__ico')}
+      <h4>${esc(title)}</h4>
+      <p>${esc(text)}</p>
+    </article>`,
+    )
+    .join('')
+
+  const commands = [
+    ['/speed', 'скорость и Core Web Vitals'],
+    ['/security', 'сертификат, заголовки, служебные файлы'],
+    ['/robots', 'robots.txt и карта сайта'],
+    ['/meta', 'мета-теги одной страницы'],
+    ['/limits', 'остаток проверок на сегодня'],
+    ['/help', 'что именно проверяется'],
+  ]
+    .map(([cmd, text]) => `<li><code>${cmd}</code> <span>${esc(text)}</span></li>`)
+    .join('')
+
+  const modes = [
+    [
+      'bot',
+      'С моделью',
+      'Порядок проверок выбирает модель: увидела битую карту сайта — пошла смотреть, откуда берутся адреса. Сама решает, какие страницы взять в выборку, и объясняет находки словами, а не строкой из правила.',
+      ['ключ доступа к модели', 'от 12 ₽ за проверку', 'минута-полторы'],
+    ],
+    [
+      'code',
+      'Без модели',
+      'Те же одиннадцать инструментов и те же 113 правил, только порядок задан заранее. Ничего не выдумывается: находки собираются из ответов инструментов, заключение складывается по шаблону.',
+      ['ничего, кроме сервера', 'бесплатно', 'полминуты'],
+    ],
+  ]
+    .map(
+      ([ic, title, text, facts], i) => `<article class="mode rise" style="--wait:${i * 90}ms">
+      <h3>${icon(ic, 'mode__ico')}${esc(title)}</h3>
+      <p>${esc(text)}</p>
+      <dl class="mode__facts">
+        <div><dt>нужно</dt><dd>${esc(facts[0])}</dd></div>
+        <div><dt>стоимость</dt><dd>${esc(facts[1])}</dd></div>
+        <div><dt>время прогона</dt><dd>${esc(facts[2])}</dd></div>
+      </dl>
+    </article>`,
+    )
+    .join('')
+
+  const prices = [
+    ['Haiku 4.5', '135 / 1080 ₽ за млн', '≈ 12 ₽', 'дешёвая, но обходит список не целиком'],
+    ['Sonnet 5', '405 / 2025 ₽ за млн', '≈ 12 ₽', 'зовёт инструменты пачками, поэтому токенов тратит втрое меньше'],
+    ['Opus', '675 / 3375 ₽ за млн', '≈ 90 ₽', 'для обхода чек-листа избыточна'],
+  ]
+    .map(
+      ([model, rate, run, note]) => `<tr>
+      <td><b>${esc(model)}</b></td><td class="mono">${esc(rate)}</td>
+      <td class="mono">${esc(run)}</td><td>${esc(note)}</td>
+    </tr>`,
+    )
+    .join('')
+
+  return `<section class="sec sec--alt" id="bot"><div class="wrap">
+  <h2 class="rise">Телеграм-бот</h2>
+  <p class="intro rise">Тот же аудит без установки: присылаете адрес сайта — получаете отчёт.
+  По ходу работы видно, что именно проверяется и сколько это заняло. В конце приходят три файла:
+  PDF для печати, HTML для браузера, Markdown для заметок.</p>
+
+  <p class="cta rise">
+    <a class="btn btn--main" href="${BOT_URL}">${icon('send')} Открыть бота</a>
+    <a class="btn btn--ghost" href="#start">${icon('code')} Поднять у себя</a>
+  </p>
+
+  <div class="botgrid">
+    ${chatMock()}
+
+    <div class="botside">
+      <h3 class="sub rise">Постоянные кнопки</h3>
+      <p class="rise">Три кнопки держатся над полем ввода и не уезжают вверх вместе с перепиской.</p>
+      <div class="keys">${keys}</div>
+
+      <h3 class="sub rise">Команды</h3>
+      <p class="rise">Быстрые проверки отвечают за секунды, к модели не обращаются и на дневной
+      лимит полного аудита не расходуются.</p>
+      <ul class="cmds rise">${commands}</ul>
+    </div>
+  </div>
+
+  <h3 class="sub rise">Два режима работы</h3>
+  <p class="intro rise">Бот работает и с языковой моделью, и без неё. Режим выбирается наличием ключа
+  в настройках: появился ключ — включается агент, убрали — проверки идут по заданному порядку.
+  Проверки при этом настоящие в обоих случаях, разница в том, кто выбирает порядок.</p>
+
+  <div class="modes">${modes}</div>
+
+  <p class="note rise">${icon('eye', 'note__ico')}<span>Прогон без модели не заглушка. На демонстрационном
+  магазине он находит 63 замечания против 21 у режима с моделью: фиксированный порядок берёт пять
+  страниц всегда, а модель решает сама и иногда ограничивается двумя. Зато модель умеет отклоняться
+  от списка, когда видит неладное, и пишет заключение человеческим языком.</span></p>
+
+  <h3 class="sub rise">Сколько стоит прогон</h3>
+  <p class="intro rise">Замеры на одном и том же сайте. Цена за проверку зависит не от цены модели,
+  а от числа кругов диалога: на каждом круге переписка отправляется заново, поэтому модель,
+  которая зовёт инструменты пачками, выходит дешевле экономной.</p>
+
+  <div class="tablewrap rise">
+    <table class="prices">
+      <thead><tr><th>Модель</th><th>Входящие / исходящие</th><th>Прогон</th><th>Замечание</th></tr></thead>
+      <tbody>${prices}</tbody>
+    </table>
+  </div>
+
+  <h3 class="sub rise">Как поднять своего бота</h3>
+  <p class="intro rise">Бот должен работать круглосуточно, поэтому ему нужен сервер: домашний
+  компьютер выключается, а вместе с ним пропадает и бот. Подойдёт самый дешёвый виртуальный
+  сервер с гигабайтом памяти.</p>
+
+  <ol class="steps rise">
+    <li>Получить токен бота у <code>@BotFather</code> в телеграме: команда <code>/newbot</code>.</li>
+    <li>Взять виртуальный сервер, поставить Node.js 22 или новее и браузер Chrome — он собирает PDF.</li>
+    <li>Отвести файл подкачки: при гигабайте памяти сборка PDF упирается в потолок без него.</li>
+    <li>Забрать код с GitHub, создать файл <code>.env</code> и вписать туда токен бота.</li>
+    <li>Оформить запуск службой системы: она поднимет бота после перезагрузки и после сбоя.</li>
+  </ol>
+
+  <p class="note rise">${icon('wallet', 'note__ico')}<span>Ключ к модели не обязателен. Без него бот
+  работает в режиме без модели и не стоит ничего, кроме аренды сервера. Дописать ключ и перезапустить
+  можно в любой момент — переустанавливать ничего не нужно.</span></p>
+  </div></section>`
+}
+
 function startSection() {
   return `<section class="sec sec--alt" id="start"><div class="wrap narrow">
   <h2 class="rise">Запуск</h2>
@@ -723,6 +933,7 @@ function footer() {
         ['#checklist', 'Чек-листы аудита'],
         ['#rules', 'База правил'],
         ['#glossary', 'Глоссарий'],
+        ['#bot', 'Телеграм-бот'],
       ],
     ],
     [
@@ -733,6 +944,7 @@ function footer() {
         [`${REPO}/blob/main/AGENT.md`, 'AGENT.md: задание агенту'],
         [`${REPO}/tree/main/src/rules`, 'Правила в файлах данных'],
         [`${REPO}/blob/main/LICENSE`, 'Лицензия MIT'],
+        [BOT_URL, 'Бот в телеграме'],
       ],
     ],
   ]
@@ -1060,6 +1272,9 @@ b { font-weight: 600; }
 .btn--main:hover { transform: translateY(-2px); box-shadow: 0 14px 32px -12px #4FD1C3; }
 .btn--ghost { border: 1px solid #27524C; color: #BFE4DF; }
 .btn--ghost:hover { background: #10302C; transform: translateY(-2px); }
+/* Тот же вид кнопки на светлом разделе: цвета шапки там не читаются. */
+.sec .btn--ghost { border-color: var(--line-hard); color: var(--ink); }
+.sec .btn--ghost:hover { background: var(--accent-soft); border-color: var(--accent); }
 
 /* картинка со сканированием */
 .scan svg { width: 100%; height: auto; display: block; }
@@ -1584,6 +1799,70 @@ b { font-weight: 600; }
   font-family: var(--f-mono); font-size: .84em; color: var(--ink);
   background: var(--accent-soft); padding: 2px 7px; border-radius: 5px;
 }
+
+/* ---------- телеграм-бот ---------- */
+.botgrid { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 40px; align-items: start; margin: 34px 0 10px; }
+@media (max-width: 900px) { .botgrid { grid-template-columns: 1fr; gap: 28px; } }
+
+/* Ширину держим: на узком экране картинка иначе растягивается во всю страницу,
+   и текст в ней становится крупнее заголовков раздела. */
+.chat { max-width: 400px; margin-inline: auto; }
+.chat svg { width: 100%; height: auto; display: block; }
+.chat text { font-family: var(--f-body); }
+.chat__bubble, .chat__file rect:first-child { fill: var(--surface); stroke: var(--line); stroke-width: 1.4; }
+.chat__head, .chat__link { font-size: 15px; font-weight: 500; }
+.chat__head { fill: var(--ink); }
+.chat__link { fill: var(--sky); }
+.chat__dot, .chat__name { fill: var(--ink); font-size: 14px; }
+.chat__time { fill: var(--ink-mute); font-size: 14px; }
+.chat__done { fill: var(--ink); font-size: 14px; font-weight: 600; }
+.chat__pages { fill: var(--ink-mute); font-size: 12px; }
+.chat__badge { fill: var(--accent-soft); }
+.chat__badge-ico { stroke: var(--accent); stroke-width: 1.6; stroke-linecap: round; }
+.chat__file-name { fill: var(--ink); font-size: 13px; font-weight: 600; }
+.chat__file-size { fill: var(--ink-mute); font-size: 11.5px; }
+
+/* Строки появляются одна за другой, но только когда переписка попала на экран:
+   иначе она успевает отыграть, пока читатель ещё наверху страницы. */
+.js .chat__row, .js .chat__file { opacity: 0; }
+.js .chat.in .chat__row, .js .chat.in .chat__file { animation: chatIn .45s ease forwards; animation-delay: var(--at, 0s); }
+@keyframes chatIn { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .js .chat__row, .js .chat__file { opacity: 1; }
+  .js .chat.in .chat__row, .js .chat.in .chat__file { animation: none; }
+}
+
+.keys { display: grid; gap: 10px; margin: 0 0 30px; }
+.key { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 4px 12px; align-items: start;
+  border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--surface); }
+.key__ico { color: var(--accent); grid-row: span 2; margin-top: 2px; }
+.key h4 { margin: 0; font-size: .95rem; }
+.key p { margin: 0; color: var(--ink-soft); font-size: .88rem; line-height: 1.55; }
+
+.cmds { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.cmds li { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; font-size: .9rem; }
+.cmds code { font-family: var(--f-mono); font-size: .84rem; color: var(--ink);
+  background: var(--accent-soft); padding: 2px 8px; border-radius: 5px; }
+.cmds span { color: var(--ink-soft); }
+
+.modes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 24px 0 26px; }
+@media (max-width: 760px) { .modes { grid-template-columns: 1fr; } }
+.mode { border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px; background: var(--surface); }
+.mode h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 1.05rem; }
+.mode__ico { color: var(--accent); }
+.mode p { margin: 0 0 16px; color: var(--ink-soft); font-size: .92rem; line-height: 1.6; }
+.mode__facts { display: grid; gap: 8px; margin: 0; padding-top: 14px; border-top: 1px solid var(--line); }
+.mode__facts > div { display: flex; justify-content: space-between; gap: 12px; }
+.mode__facts dt { color: var(--ink-mute); font-size: .82rem; }
+.mode__facts dd { margin: 0; font-weight: 600; font-size: .86rem; text-align: right; }
+
+.tablewrap { overflow-x: auto; margin: 0 0 26px; }
+.prices { border-collapse: collapse; width: 100%; min-width: 560px; font-size: .9rem; }
+.prices th, .prices td { text-align: left; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.prices th { color: var(--ink-mute); font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.prices td { color: var(--ink-soft); }
+.prices td b { color: var(--ink); }
+.prices .mono { font-family: var(--f-mono); font-size: .84rem; white-space: nowrap; }
 
 /* ---------- наверх ---------- */
 .totop {

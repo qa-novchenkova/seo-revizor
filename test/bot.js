@@ -27,6 +27,7 @@ const {
   checkQuickLimits,
   spendQuick,
   accessState,
+  pagesLine,
   checkGlobalLimit,
   resetAccess,
   shouldRetry,
@@ -81,24 +82,15 @@ console.log('  ✓ лимиты не общие, а по пользовател�
 
 const site = 'https://example.com/'
 
-assert.equal(
-  describeCall({ name: 'check_robots', input: { url: site } }, site),
-  'robots.txt',
-  'на главной путь не пишем: он ничего не добавляет',
-)
+assert.equal(describeCall({ name: 'check_robots', input: { url: site } }, site), 'robots.txt')
 assert.equal(
   describeCall({ name: 'check_meta', input: { url: 'https://example.com/legal/offer' } }, site),
-  'мета-теги /legal/offer',
-  'домен не повторяем на каждой строке, остаётся путь',
-)
-assert.equal(
-  describeCall({ name: 'check_url', input: { url: 'https://other.com/page' } }, site),
-  'код ответа other.com',
-  'чужой домен нужно называть целиком',
+  'мета-теги',
+  'адрес в ходе проверки не показываем: список идёт в конце',
 )
 assert.equal(describeCall({ name: 'check_content', input: {} }, site), 'контент и дубли')
 assert.equal(describeCall({ name: 'неизвестный', input: {} }, site), 'неизвестный', 'новый инструмент не ломает вывод')
-console.log('  ✓ шаги подписаны по-русски, домен не дублируется в каждой строке')
+console.log('  ✓ шаги подписаны по-русски')
 
 // ── время шагов ──────────────────────────────────────────────────────────────
 
@@ -211,25 +203,29 @@ assert.ok(many.length <= 3950, `сообщение должно влезать �
 assert.match(many, /список обрезан/, 'обрезку нельзя делать молча')
 console.log('  ✓ длинный список обрезается и об этом сказано')
 
-// Часть инструментов берёт список страниц одним вызовом: по строке должно быть
-// видно, что осмотрена не одна страница.
-assert.equal(
-  describeCall({ name: 'check_content', input: { urls: ['a', 'b', 'c', 'd', 'e'] } }, 'https://dzen.ru/'),
-  'контент и дубли — 5 страниц',
-)
-assert.equal(
-  describeCall(
-    { name: 'check_analytics', input: { url: 'https://dzen.ru/', alsoCheck: ['https://dzen.ru/a', 'https://dzen.ru/b'] } },
-    'https://dzen.ru/',
-  ),
-  'аналитика — 3 страницы',
-)
+// В ходе проверки адреса не показываются: часть инструментов берёт список
+// страниц одним вызовом, и строка про одну страницу вводила в заблуждение.
+assert.equal(describeCall({ name: 'check_content', input: { urls: ['a', 'b'] } }), 'контент и дубли')
 assert.equal(
   describeCall({ name: 'check_meta', input: { url: 'https://dzen.ru/dnevnikmama' } }, 'https://dzen.ru/'),
-  'мета-теги /dnevnikmama',
-  'одиночная страница описывается по-прежнему',
+  'мета-теги',
 )
-console.log('  ✓ по строке видно, сколько страниц взял вызов')
+console.log('  ✓ в ходе проверки видно название проверки, без адресов')
+
+// Зато в конце идёт полный список: сколько страниц и какие именно.
+assert.equal(
+  pagesLine(['https://dzen.ru/', 'https://dzen.ru/dnevnikmama', 'https://dzen.ru/ncfu'], 'https://dzen.ru/'),
+  'проверено на 3 страницах: /, /dnevnikmama, /ncfu',
+)
+assert.equal(
+  pagesLine(Array.from({ length: 15 }, (_, i) => `https://dzen.ru/p${i}`), 'https://dzen.ru/'),
+  'проверено на 15 страницах: ' +
+    Array.from({ length: 12 }, (_, i) => `/p${i}`).join(', ') +
+    ' и ещё 3',
+  'длинный список обрезается, но общее число остаётся честным',
+)
+assert.equal(pagesLine([], 'https://dzen.ru/'), '', 'без страниц строки нет')
+console.log('  ✓ в конце перечислены проверенные страницы')
 
 // ── повтор обращений к Telegram ──────────────────────────────────────────────
 

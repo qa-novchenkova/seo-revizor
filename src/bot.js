@@ -689,12 +689,13 @@ async function runAudit(job, notice) {
   const done = []
   let lastEdit = 0
 
-  const show = async (force = false) => {
+  const show = async (force = false, tail = '') => {
     // Telegram не любит частых правок сообщения, поэтому не чаще раза в две секунды
     if (!force && Date.now() - lastEdit < 2000) return
     lastEdit = Date.now()
 
     const lines = [`Проверяю ${site}`, '', ...done.slice(-14).map(line)]
+    if (tail) lines.push('', tail)
     await edit(chatId, progress.message_id, lines.join('\n')).catch(() => {})
   }
 
@@ -720,7 +721,7 @@ async function runAudit(job, notice) {
   const result = HAS_MODEL ? await audit(site, { onStep }) : await runDirect(site, { onStep })
 
   done.push({ text: `готово за ${seconds(Date.now() - started)}`, ms: 0, done: true })
-  await show(true)
+  await show(true, pagesLine(result.pages, site))
 
   // ── отчёт ────────────────────────────────────────────────────────────────
   const previous = previousRun(site)
@@ -732,10 +733,21 @@ async function runAudit(job, notice) {
   const name = fileNameFor(site)
   const pdf = await makePdf(saved)
 
-  if (pdf) {
-    await sendDocument(chatId, pdf, name + '.pdf', caption, 'application/pdf')
-  } else {
-    await sendDocument(chatId, markdown, name + '.md', caption, 'text/markdown')
+  // Три вида отчёта: PDF показать и распечатать, HTML открыть в браузере,
+  // Markdown — положить в свои заметки и править. Подпись идёт с первым:
+  // Telegram показывает её под файлом, и повторять её трижды незачем.
+  const files = [
+    pdf && { data: pdf, name: name + '.pdf', mime: 'application/pdf' },
+    saved.files.html && {
+      data: readFileSync(saved.files.html),
+      name: name + '.html',
+      mime: 'text/html',
+    },
+    { data: markdown, name: name + '.md', mime: 'text/markdown' },
+  ].filter(Boolean)
+
+  for (const [index, file] of files.entries()) {
+    await sendDocument(chatId, file.data, file.name, index === 0 ? caption : '', file.mime)
   }
 
   if (ADMINS.includes(userId) && result.usage.cost !== null) {
@@ -788,25 +800,24 @@ export function describeCall(event, site = '') {
     list_rules: 'чек-лист',
   }
 
-  const what = names[event.name] || event.name
-
-  // Часть инструментов берёт список страниц одним вызовом. Раньше такая строка
-  // выглядела как проверка одной страницы, и по переписке казалось, будто
-  // осмотрено три страницы вместо пяти.
-  const many = pagesIn(event.input)
-  if (many > 1) return `${what} — ${many} ${plural(many, FORMS.page)}`
-
-  const where = placeOf(event.input?.url, site)
-  return where ? `${what} ${where}` : what
+  // Адрес в строке не показываем намеренно: часть инструментов берёт список
+  // страниц одним вызовом, и строка про одну страницу вводила в заблуждение.
+  // Полный список идёт в конце проверки и в самом отчёте.
+  return names[event.name] || event.name
 }
 
-/** Сколько страниц берёт вызов: у части инструментов это список, а не адрес. */
-function pagesIn(input) {
-  if (!input) return 0
-  const list = Array.isArray(input.urls) ? input.urls : []
-  const extra = Array.isArray(input.alsoCheck) ? input.alsoCheck : []
-  const single = input.url && !list.length ? 1 : 0
-  return list.length + extra.length + single
+/** Список проверенных страниц под ходом проверки. */
+export function pagesLine(pages = [], site = '') {
+  if (!pages.length) return ''
+
+  const shown = pages.slice(0, 12).map((page) => placeOf(page, site) || '/')
+  const rest = pages.length - shown.length
+
+  return (
+    `проверено на ${pages.length} ${plural(pages.length, FORMS.pageOn)}: ` +
+    shown.join(', ') +
+    (rest > 0 ? ` и ещё ${rest}` : '')
+  )
 }
 
 /** Путь страницы внутри проверяемого сайта; для чужого домена — имя домена. */
@@ -953,20 +964,34 @@ function edit(chatId, messageId, text) {
 
 /** Отчёт уходит файлом: в сообщение он не помещается, лимит около 4000 знаков. */
 async function sendDocument(chatId, content, fileName, caption, mime = 'text/markdown') {
-  const form = new FormData()
-  form.append('chat_id', String(chatId))
-  form.append('caption', caption.slice(0, 1000))
-  form.append('document', new Blob([content], { type: mime }), fileName)
+  // Повтор нужен по той же причине, что и в обычных сообщениях: сеть до
+  // Telegram изредка виснет. Отчётов теперь три, и потеря одного из них
+  // выглядела бы как пропавший файл без всякого объяснения.
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const form = new FormData()
+      form.append('chat_id', String(chatId))
+      form.append('caption', (caption || '').slice(0, 1000))
+      form.append('document', new Blob([content], { type: mime }), fileName)
 
-  const response = await fetch(`${API}/sendDocument`, {
-    method: 'POST',
-    body: form,
-    signal: AbortSignal.timeout(120_000),
-  })
+      const response = await fetch(`${API}/sendDocument`, {
+        method: 'POST',
+        body: form,
+        signal: AbortSignal.timeout(120_000),
+      })
 
-  const data = await response.json()
-  if (!data.ok) throw new Error(`sendDocument: ${data.description || response.status}`)
-  return data.result
+      const data = await response.json()
+      if (!data.ok) {
+        const error = new Error(`sendDocument: ${data.description || response.status}`)
+        error.fromTelegram = true
+        throw error
+      }
+      return data.result
+    } catch (error) {
+      if (!shouldRetry(error, attempt)) throw error
+      await sleep(400 * attempt)
+    }
+  }
 }
 
 function reportFailure(error) {

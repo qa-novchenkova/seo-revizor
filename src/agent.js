@@ -112,7 +112,12 @@ function collect(text, call, findings, pages) {
     return
   }
 
-  const url = data.finalUrl || data.url || call.input?.url
+  // Записываем адрес, который запрашивали, а не конечный после переадресации.
+  // Иначе в отчёте появляются чужие домены — сайт мог перебросить на страницу
+  // входа, — а ключ находки меняется от прогона к прогону вместе со случайными
+  // параметрами в адресе, и сравнить два прогона становится нечем.
+  // Сам факт переадресации никуда не девается: его показывает check_url.
+  const url = call.input?.url || data.url || data.finalUrl
   if (url) pages.add(url)
 
   for (const finding of data.findings || []) {

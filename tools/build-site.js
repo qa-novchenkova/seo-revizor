@@ -240,7 +240,7 @@ function nav() {
     ['#rules', 'Правила', 'content'],
     ['#glossary', 'Глоссарий', 'meta'],
     ['#bot', 'Телеграм-бот', 'send'],
-    ['#start', 'Запуск', 'code'],
+    ['#start', 'Быстрый старт', 'code'],
   ]
 
   return `<nav class="nav"><div class="wrap">
@@ -282,11 +282,8 @@ function about() {
       .join('')}
   </div>
 
-  <p class="note rise">${icon('eye', 'note__ico')}<span>Сервер работает на вашей машине, отчёты
-  складываются в папку <code>reports</code> рядом с проектом и в репозиторий не попадают. Наружу
-  уходит ровно три вещи: запросы к проверяемому сайту, его адрес в PageSpeed Insights для замера
-  скорости и — только в агентном режиме — ответы инструментов, которые получает модель. Проверять
-  чужой сайт без согласия владельца не следует: обход создаёт нагрузку.</span></p>
+  <p class="note rise">${icon('eye', 'note__ico')}<span>Проверять чужой сайт без согласия владельца
+  не следует: обход создаёт нагрузку.</span></p>
   </div></section>`
 }
 
@@ -504,9 +501,7 @@ function checklistSection() {
   Для каждого дефекта детально расписаны риски и методика проверки.</p>
 
   <ul class="beats rise">
-    <li><b>${automated}</b> проверок закрыты инструментами сервера: данные добываются запросами
-    и разбором разметки, без участия модели. Агент лишь выбирает порядок вызовов — поэтому те же
-    находки получаются и в режиме без модели.</li>
+    <li><b>${automated}</b> проверок полностью автоматизированы силами ИИ-агента.</li>
     <li><b>${manual}</b> пунктов вынесены на ручной контроль. Это осознанное разделение: алгоритм
     мгновенно находит технические дефекты, но оценить, насколько заголовок категории соответствует
     её реальному содержимому, можно только человеческим взглядом.</li>
@@ -912,47 +907,83 @@ function botSection() {
 }
 
 function startSection() {
+  const clients = [
+    ['Claude Code', 'консольный ИИ-интерфейс от Anthropic'],
+    ['Cursor или Windsurf', 'популярные ИИ-редакторы кода'],
+    ['Cline и Roo Code', 'продвинутые ИИ-ассистенты для VS Code'],
+    ['Claude Desktop', 'официальное настольное приложение'],
+  ]
+    .map(([name, what]) => `<li><b>${esc(name)}</b> — ${esc(what)}</li>`)
+    .join('')
+
   return `<section class="sec sec--alt" id="start"><div class="wrap narrow">
-  <h2 class="rise">Запуск</h2>
-  <p class="intro rise">Нужен Node.js 22 или новее. Установка общая для обоих сценариев.</p>
+  <h2 class="rise">${icon('spark', 'h2__ico')}Быстрый старт</h2>
+  <p class="intro rise">Программу можно использовать в двух принципиально разных режимах: как
+  внешний инструмент для вашего ИИ-клиента или как независимый консольный скрипт.</p>
+
+  <p class="rise">Перед стартом убедитесь, что установлен Node.js 22 или новее. Откройте терминал
+  и выполните базовые команды для установки проекта:</p>
 
   <pre class="rise"><code>git clone ${REPO}.git
 cd seo-revizor
 npm install</code></pre>
 
-  <p class="intro rise">Дальше пути расходятся. Разница в том, кто управляет вызовами
-  инструментов: внешний клиент или собственный цикл проекта.</p>
+  <h3 class="sub rise">${icon('code', 'h2__ico')}Выберите вариант запуска</h3>
 
-  <h3 class="sub rise">Сценарий 1. Как MCP-сервер в клиенте</h3>
-  <p class="rise">Инструменты подключаются к Claude Code или другому клиенту с поддержкой
-  протокола MCP. Порядок вызовов выбирает модель клиента, своего ключа проект не требует.
-  Файл <code>.mcp.json</code> уже лежит в репозитории и описывает, как запустить сервер:
-  команда, аргументы, транспорт stdio.</p>
+  <h4 class="mini rise">Режим 1. Подключение к ИИ-клиенту через протокол MCP</h4>
+  <p class="rise">Проект подключается как плагин к любому приложению, которое поддерживает
+  открытый стандарт Model Context Protocol.</p>
 
-  <ol class="steps rise">
-    <li>Откройте папку проекта в клиенте с поддержкой MCP.</li>
-    <li>Убедитесь, что инструменты Ревизора появились в списке доступных.</li>
-    <li>Отправьте модели запрос: <code>Следуй инструкциям в AGENT.md и проверь сайт
-    [адрес_сайта]</code></li>
-  </ol>
+  <dl class="specs rise">
+    <div>
+      <dt>Как это работает</dt>
+      <dd>Порядок вызовов и логику анализа определяет языковая модель, настроенная в вашем клиенте.
+      Проект выступает в роли набора инструментов для неё.</dd>
+    </div>
+    <div>
+      <dt>Настройка</dt>
+      <dd>Все MCP-совместимые приложения считывают конфигурацию запуска из файла
+      <code>.mcp.json</code>, который уже лежит в корне репозитория. Достаточно импортировать
+      этот файл или указать путь к проекту в настройках клиента.</dd>
+    </div>
+    <div>
+      <dt>Запрос к модели</dt>
+      <dd>После подключения попросите ИИ в чате: <code>Проверить сайт https://example.com,
+      руководствуясь правилами из файла AGENT.md</code></dd>
+    </div>
+  </dl>
 
-  <h3 class="sub rise">Сценарий 2. Как самостоятельный агент</h3>
-  <p class="rise">Проект сам поднимает MCP-сервер дочерним процессом, сам ведёт цикл вызовов
-  и сам собирает отчёт в трёх форматах. Клиент не нужен, нужен ключ доступа к модели
+  <p class="rise">Примеры популярных клиентов:</p>
+  <ul class="plainlist rise">${clients}</ul>
+
+  <h4 class="mini rise">Режим 2. Автономный запуск напрямую через терминал</h4>
+  <p class="rise">Если сторонние ИИ-программы не нужны, аудит запускается прямо из консоли.
+  Здесь есть два сценария.</p>
+
+  <p class="rise"><b>Вариант А. Умный ИИ-агент</b> — нужен API-ключ. Проект сам связывается
+  с нейросетью, пошагово вызывает нужные инструменты и собирает подробный отчёт в форматах
+  PDF, HTML и Markdown.</p>
+
+  <pre class="rise"><code>node test/audit.js https://example.com</code></pre>
+
+  <p class="rise">Потребуется указать <code>ANTHROPIC_API_KEY</code> или ключ совместимого шлюза
   в файле <code>.env</code>.</p>
 
-  <pre class="rise"><code>node test/audit.js https://example.com/</code></pre>
+  <p class="rise"><b>Вариант Б. Быстрый скрипт</b> — бесплатно, без ИИ. Программа собирает
+  технические данные с сайта по жёстко заданному алгоритму, вообще не обращаясь к нейросетям.</p>
 
-  <p class="rise">Без ключа тот же прогон идёт по заданному порядку, бесплатно и без обращений
-  к модели:</p>
+  <pre class="rise"><code>node test/direct.js https://example.com</code></pre>
 
-  <pre class="rise"><code>node test/direct.js https://example.com/</code></pre>
+  <h3 class="sub rise">${icon('security', 'h2__ico')}Памятка по API-ключам</h3>
 
-  <p class="note rise">${icon('spark', 'note__ico')}<span>Десять инструментов из одиннадцати
-  работают сразу в любом сценарии. Свой ключ нужен только для измерения скорости: его бесплатно
-  выдаёт Google, и он остаётся на вашей машине в файле <code>.env</code>. Без ключа проверка
-  не прерывается, а помечает раздел скорости как непроверенный. Через телеграм-бот ключ не
-  понадобится: там запрос уходит с сервера, на котором Ревизор уже настроен.</span></p>
+  <ol class="steps rise">
+    <li><b>Ключ ИИ-модели.</b> Нужен только для варианта А и для работы телеграм-бота. Если вы
+    подключаете сервер к внешнему клиенту, ключ проекту не нужен — используются ресурсы самого
+    клиента.</li>
+    <li><b>Ключ PageSpeed от Google.</b> Нужен для оценки скорости сайта в инструменте
+    <code>check_speed</code>. Ключ бесплатный. Без него тесты скорости просто помечаются как
+    непроверенные, а остальная программа продолжает работу.</li>
+  </ol>
 
   <p class="rise">Описание устройства и разбор каждого файла собраны в
   <a href="${REPO}#readme">README репозитория</a>.</p>
@@ -1286,7 +1317,10 @@ b { font-weight: 600; }
   border: 1px solid #1D4A45; border-radius: 999px; padding: 6px 14px;
 }
 .hero h1 {
-  margin: 0; font-size: clamp(2.9rem, 8.4vw, 5.4rem); line-height: .94;
+  /* Междустрочный интервал плотнее единицы срезает нижние выносные элементы
+     букв: у «р» и «у» хвост уходит за границу строки, а градиент по тексту
+     обрезается ровно по ней. */
+  margin: 0; font-size: clamp(2.9rem, 8.4vw, 5.4rem); line-height: 1.06;
   font-weight: 800; letter-spacing: -.045em;
 }
 .hero h1 em {
@@ -1903,6 +1937,22 @@ b { font-weight: 600; }
 .prices td { color: var(--ink-soft); }
 .prices td b { color: var(--ink); }
 .prices .mono { font-family: var(--f-mono); font-size: .84rem; white-space: nowrap; }
+
+/* ---------- быстрый старт ---------- */
+.h2__ico { color: var(--accent); margin-right: 10px; vertical-align: -3px; }
+.mini { margin: 34px 0 10px; font-size: 1.08rem; font-weight: 600; }
+.specs { display: grid; gap: 14px; margin: 0 0 22px; }
+.specs > div { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 6px 18px; }
+@media (max-width: 640px) { .specs > div { grid-template-columns: 1fr; } }
+.specs dt { color: var(--ink-mute); font-size: .82rem; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; padding-top: 2px; }
+.specs dd { margin: 0; color: var(--ink-soft); font-size: .93rem; line-height: 1.6; }
+.specs code, .plainlist code { font-family: var(--f-mono); font-size: .84em; color: var(--ink);
+  background: var(--accent-soft); padding: 2px 7px; border-radius: 5px; }
+.plainlist { list-style: none; margin: 0 0 26px; padding: 0; display: grid; gap: 8px; }
+.plainlist li { color: var(--ink-soft); font-size: .93rem; padding-left: 18px; position: relative; }
+.plainlist li::before { content: ''; position: absolute; left: 0; top: .62em;
+  width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.plainlist b { color: var(--ink); }
 
 /* ---------- наверх ---------- */
 .totop {

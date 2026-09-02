@@ -29,7 +29,7 @@ import { toMarkdown, toHtml } from './report.js'
 import { htmlToPdf, findBrowser } from './pdf.js'
 import { saveRun, previousRun, compare } from './store.js'
 import { SEVERITY_LABELS, SEVERITIES } from './rules/index.js'
-import { money } from './lib/text.js'
+import { money, plural, FORMS } from './lib/text.js'
 import { checkSpeed } from './checks/speed.js'
 import { checkSecurity } from './checks/security.js'
 import { checkRobots } from './checks/robots.js'
@@ -789,8 +789,24 @@ export function describeCall(event, site = '') {
   }
 
   const what = names[event.name] || event.name
+
+  // Часть инструментов берёт список страниц одним вызовом. Раньше такая строка
+  // выглядела как проверка одной страницы, и по переписке казалось, будто
+  // осмотрено три страницы вместо пяти.
+  const many = pagesIn(event.input)
+  if (many > 1) return `${what} — ${many} ${plural(many, FORMS.page)}`
+
   const where = placeOf(event.input?.url, site)
   return where ? `${what} ${where}` : what
+}
+
+/** Сколько страниц берёт вызов: у части инструментов это список, а не адрес. */
+function pagesIn(input) {
+  if (!input) return 0
+  const list = Array.isArray(input.urls) ? input.urls : []
+  const extra = Array.isArray(input.alsoCheck) ? input.alsoCheck : []
+  const single = input.url && !list.length ? 1 : 0
+  return list.length + extra.length + single
 }
 
 /** Путь страницы внутри проверяемого сайта; для чужого домена — имя домена. */

@@ -211,6 +211,26 @@ assert.ok(many.length <= 3950, `сообщение должно влезать �
 assert.match(many, /список обрезан/, 'обрезку нельзя делать молча')
 console.log('  ✓ длинный список обрезается и об этом сказано')
 
+// Часть инструментов берёт список страниц одним вызовом: по строке должно быть
+// видно, что осмотрена не одна страница.
+assert.equal(
+  describeCall({ name: 'check_content', input: { urls: ['a', 'b', 'c', 'd', 'e'] } }, 'https://dzen.ru/'),
+  'контент и дубли — 5 страниц',
+)
+assert.equal(
+  describeCall(
+    { name: 'check_analytics', input: { url: 'https://dzen.ru/', alsoCheck: ['https://dzen.ru/a', 'https://dzen.ru/b'] } },
+    'https://dzen.ru/',
+  ),
+  'аналитика — 3 страницы',
+)
+assert.equal(
+  describeCall({ name: 'check_meta', input: { url: 'https://dzen.ru/dnevnikmama' } }, 'https://dzen.ru/'),
+  'мета-теги /dnevnikmama',
+  'одиночная страница описывается по-прежнему',
+)
+console.log('  ✓ по строке видно, сколько страниц взял вызов')
+
 // ── повтор обращений к Telegram ──────────────────────────────────────────────
 
 const network = Object.assign(new Error('fetch failed'), { cause: { code: 'UND_ERR_CONNECT_TIMEOUT' } })

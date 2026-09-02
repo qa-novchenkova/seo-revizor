@@ -137,21 +137,53 @@ export function toMarkdown(run, diff = null) {
 const escape = (value) =>
   String(value).replace(/[&<>"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[char])
 
-/** Простейший разбор абзацев и списков из текста модели. */
-function paragraphs(text) {
+/**
+ * Разметка внутри строки.
+ *
+ * Модель пишет заключение на Markdown — так же, как пишет их человек. В файле
+ * .md это и нужно, а в HTML и PDF звёздочки должны стать оформлением, иначе
+ * отчёт выглядит как черновик. Экранирование идёт первым: чужая разметка
+ * не может превратиться в теги.
+ */
+function inline(text) {
+  return escape(text)
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    .replace(/\n/g, '<br>')
+}
+
+/** Пункты списка: строка-маркер отбрасывается, пустые строки выкидываются. */
+function listItems(block, marker) {
+  return block
+    .split('\n')
+    .map((line) => line.replace(marker, '').trim())
+    .filter(Boolean)
+}
+
+/** Разбор заключения модели: заголовки, списки, абзацы. */
+export function paragraphs(text) {
   return text
     .trim()
     .split(/\n{2,}/)
     .map((block) => {
       const trimmed = block.trim()
+
+      // Заголовки внутри заключения делаем подзаголовками: первый уровень
+      // в документе уже занят названием отчёта.
+      const heading = trimmed.match(/^#{1,6}\s+(.+)$/)
+      if (heading) return `<h3 class="sub">${inline(heading[1])}</h3>`
+
       if (/^[-*]\s/m.test(trimmed)) {
-        const items = trimmed
-          .split('\n')
-          .map((line) => line.replace(/^[-*]\s*/, '').trim())
-          .filter(Boolean)
-        return `<ul>${items.map((item) => `<li>${escape(item)}</li>`).join('')}</ul>`
+        const items = listItems(trimmed, /^[-*]\s*/)
+        return `<ul>${items.map((item) => `<li>${inline(item)}</li>`).join('')}</ul>`
       }
-      return `<p>${escape(trimmed).replace(/\n/g, '<br>')}</p>`
+
+      if (/^\d+[.)]\s/m.test(trimmed)) {
+        const items = listItems(trimmed, /^\d+[.)]\s*/)
+        return `<ol>${items.map((item) => `<li>${inline(item)}</li>`).join('')}</ol>`
+      }
+
+      return `<p>${inline(trimmed)}</p>`
     })
     .join('\n')
 }
@@ -299,7 +331,12 @@ const STYLE = `
 
   .section { margin: 0 0 34px; }
   .prose p { margin: 0 0 12px; }
-  .prose ul { margin: 0 0 12px; padding-left: 20px; }
+  .prose ul, .prose ol { margin: 0 0 12px; padding-left: 20px; }
+  .prose li { margin: 0 0 4px; }
+  .prose h3 { margin: 18px 0 8px; }
+  .prose strong { font-weight: 600; }
+  .prose code { font-family: Consolas, "Courier New", monospace; font-size: 12.5px;
+    background: var(--panel); padding: 1px 4px; border-radius: 3px; }
 
   .finding { border: 1px solid var(--line); border-left: 4px solid var(--minor); border-radius: 6px; padding: 14px 16px; margin: 0 0 10px; break-inside: avoid; }
   .finding--critical { border-left-color: var(--critical); }

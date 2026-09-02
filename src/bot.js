@@ -826,7 +826,7 @@ export function summary(result, diff) {
   ]
 
   if (diff) {
-    lines.push(`С прошлой проверки: исправлено ${diff.fixed.length}, новых ${diff.added.length}`)
+    lines.push(`С прошлой проверки: исправлено ${diff.fixed.length}, новых ${diff.appeared.length}`)
   }
 
   if (result.stoppedBy === 'limit') {

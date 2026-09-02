@@ -10,7 +10,7 @@ import assert from 'node:assert/strict'
 import { existsSync, statSync, rmSync } from 'node:fs'
 import path from 'node:path'
 
-import { toMarkdown, toHtml } from '../src/report.js'
+import { toMarkdown, toHtml, paragraphs } from '../src/report.js'
 import { saveRun, previousRun, compare, folderFor } from '../src/store.js'
 import { htmlToPdf, findBrowser } from '../src/pdf.js'
 
@@ -126,3 +126,28 @@ if (!browser) {
 }
 
 console.log(`\n  Готово. Файлы в ${saved2.dir}\n`)
+
+
+// ── разметка заключения ──────────────────────────────────────────────────────
+
+// Модель пишет заключение на Markdown. В файле .md так и надо, а в HTML и PDF
+// звёздочки обязаны стать оформлением — иначе отчёт выглядит черновиком.
+
+const prose = paragraphs(
+  '## Общее состояние\n\n' +
+    '**Охват:** 15 страниц, файл `robots.txt` есть.\n\n' +
+    '- **Два H1** на главной\n- Мало текста\n\n' +
+    '1. Сжать картинки\n2. Убрать второй H1',
+)
+
+assert.match(prose, /<h3 class="sub">Общее состояние<\/h3>/, 'заголовок стал подзаголовком')
+assert.match(prose, /<strong>Охват:<\/strong>/, 'жирный текст стал жирным')
+assert.match(prose, /<code>robots\.txt<\/code>/, 'имя файла стало моноширинным')
+assert.match(prose, /<ul><li><strong>Два H1<\/strong> на главной<\/li>/, 'разметка работает и внутри списка')
+assert.match(prose, /<ol><li>Сжать картинки<\/li>/, 'нумерованный список остался нумерованным')
+assert.doesNotMatch(prose, /\*\*/, 'звёздочек в готовом HTML не остаётся')
+console.log('  ✓ разметка заключения превращается в оформление')
+
+// Чужие теги в тексте модели остаются текстом, а не разметкой.
+assert.match(paragraphs('Тег <script>alert(1)</script> в тексте'), /&lt;script&gt;/)
+console.log('  ✓ посторонние теги экранируются')

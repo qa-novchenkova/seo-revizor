@@ -126,7 +126,9 @@ const run = {
   stoppedBy: 'end_turn',
 }
 
-const text = summary(run, { fixed: ['x'], added: ['y', 'z'], stayed: [] })
+// Поля здесь те же, что возвращает compare() из store.js. Раньше в тесте
+// стояло added вместо appeared — тест проходил, а бот падал на живом прогоне.
+const text = summary(run, { fixed: ['x'], appeared: ['y', 'z'], stayed: [] })
 assert.match(text, /Найдено 3/)
 assert.match(text, /критично: 2/)
 assert.match(text, /исправлено 1, новых 2/)

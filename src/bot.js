@@ -832,7 +832,9 @@ export function describeCall(event, site = '') {
 export function pagesLine(pages = [], site = '') {
   if (!pages.length) return ''
 
-  const shown = pages.slice(0, 12).map((page) => placeOf(page, site) || '/')
+  // Адреса здесь не режем: это единственное место, где видно, что именно
+  // проверено, и обрубок вида /sitemaps/channels_v2/sitem… ничего не говорит.
+  const shown = pages.slice(0, 12).map((page) => placeOf(page, site, Infinity) || '/')
   const rest = pages.length - shown.length
 
   return (
@@ -843,14 +845,14 @@ export function pagesLine(pages = [], site = '') {
 }
 
 /** Путь страницы внутри проверяемого сайта; для чужого домена — имя домена. */
-function placeOf(url, site) {
+function placeOf(url, site, max = 28) {
   if (!url) return ''
 
   try {
     const page = new URL(url)
     const host = site ? new URL(site).hostname : page.hostname
     if (page.hostname !== host) return page.hostname
-    return page.pathname === '/' ? '' : cut(page.pathname, 28)
+    return page.pathname === '/' ? '' : cut(page.pathname, max)
   } catch {
     return ''
   }

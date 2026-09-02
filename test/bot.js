@@ -246,6 +246,12 @@ assert.equal(
   'длинный список обрезается, но общее число остаётся честным',
 )
 assert.equal(pagesLine([], 'https://dzen.ru/'), '', 'без страниц строки нет')
+
+// Длинные адреса в этом списке не обрезаются: обрубок ничего не сообщает.
+assert.equal(
+  pagesLine(['https://dzen.ru/sitemaps/channels_v2/sitemap.xml'], 'https://dzen.ru/'),
+  'проверено на 1 странице: /sitemaps/channels_v2/sitemap.xml',
+)
 console.log('  ✓ в конце перечислены проверенные страницы')
 
 // ── повтор обращений к Telegram ──────────────────────────────────────────────

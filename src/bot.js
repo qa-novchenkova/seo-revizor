@@ -132,6 +132,10 @@ const HELLO = [
   '',
   'По ходу работы я показываю, что именно смотрю, а в конце присылаю отчёт файлом: что не так, чем вредит, как исправить.',
   '',
+  'Проверяйте только свои сайты или те, где есть разрешение владельца. Проверка создаёт нагрузку и среди прочего запрашивает служебные файлы — на чужом сайте это выглядит как поиск уязвимостей.',
+  '',
+  'О вас бот хранит только числовой идентификатор Telegram, чтобы не спрашивать код повторно. Удалить его: /forget',
+  '',
   `Полный чек-лист: ${SITE}`,
 ].join('\n')
 
@@ -180,6 +184,7 @@ const COMMANDS = [
   { command: 'security', description: 'Только безопасность: /security адрес' },
   { command: 'robots', description: 'Только robots.txt: /robots адрес' },
   { command: 'meta', description: 'Только мета-теги страницы: /meta адрес' },
+  { command: 'forget', description: 'Удалить мои данные из бота' },
 ]
 
 const ABOUT = ACCESS_CODES.length
@@ -281,6 +286,24 @@ export function matchCode(text) {
 }
 
 /** Пускать ли этого человека к проверкам. */
+/**
+ * Удаление следов человека по его просьбе.
+ *
+ * Бот хранит о людях единственное: числовой идентификатор тех, кто ввёл код.
+ * Право попросить это удалить есть у каждого, и просьба должна исполняться
+ * без переписки с владельцем — поэтому обычная команда, а не обращение.
+ */
+export function forget(userId) {
+  const wasIn = unlocked.delete(userId)
+  if (wasIn) saveUnlocked()
+
+  forgetLimits(userId)
+
+  return wasIn
+    ? 'Ваш идентификатор удалён, счётчики сброшены. Чтобы вернуться, пришлите кодовое слово заново.'
+    : 'Удалять нечего: ваш идентификатор у бота не сохранён.'
+}
+
 export function accessState(userId, text = '') {
   if (ALLOWED.length && !ALLOWED.includes(userId)) return 'closed'
   // Владелец бота код не вводит: иначе смена кодов запирает его самого.
@@ -471,6 +494,8 @@ async function handleMessage(message) {
     return void (await send(chatId, limitsFor(userId)))
   }
 
+  if (text.startsWith('/forget')) return void (await send(chatId, forget(userId)))
+
   // Нажатие на постоянную кнопку приходит обычным сообщением с её текстом
   if (BUTTONS[text]) return void (await send(chatId, BUTTONS[text]()))
 
@@ -645,6 +670,11 @@ export function spend(userId) {
 /** Сброс счётчиков — нужен тестам, чтобы прогоны не влияли друг на друга. */
 export function resetLimits() {
   usage.clear()
+}
+
+/** Счётчики одного человека: часть удаления данных по его просьбе. */
+function forgetLimits(userId) {
+  usage.delete(userId)
 }
 
 function limitsFor(userId) {

@@ -27,6 +27,7 @@ const {
   checkQuickLimits,
   spendQuick,
   accessState,
+  forget,
   pagesLine,
   stepFor,
   checkGlobalLimit,
@@ -228,29 +229,29 @@ console.log('  ✓ длинный список обрезается и об эт
 // страниц одним вызовом, и строка про одну страницу вводила в заблуждение.
 assert.equal(describeCall({ name: 'check_content', input: { urls: ['a', 'b'] } }), 'контент и дубли')
 assert.equal(
-  describeCall({ name: 'check_meta', input: { url: 'https://dzen.ru/dnevnikmama' } }, 'https://dzen.ru/'),
+  describeCall({ name: 'check_meta', input: { url: 'https://example.com/catalog' } }, 'https://example.com/'),
   'мета-теги',
 )
 console.log('  ✓ в ходе проверки видно название проверки, без адресов')
 
 // Зато в конце идёт полный список: сколько страниц и какие именно.
 assert.equal(
-  pagesLine(['https://dzen.ru/', 'https://dzen.ru/dnevnikmama', 'https://dzen.ru/ncfu'], 'https://dzen.ru/'),
-  'проверено на 3 страницах: /, /dnevnikmama, /ncfu',
+  pagesLine(['https://example.com/', 'https://example.com/catalog', 'https://example.com/about'], 'https://example.com/'),
+  'проверено на 3 страницах: /, /catalog, /about',
 )
 assert.equal(
-  pagesLine(Array.from({ length: 15 }, (_, i) => `https://dzen.ru/p${i}`), 'https://dzen.ru/'),
+  pagesLine(Array.from({ length: 15 }, (_, i) => `https://example.com/p${i}`), 'https://example.com/'),
   'проверено на 15 страницах: ' +
     Array.from({ length: 12 }, (_, i) => `/p${i}`).join(', ') +
     ' и ещё 3',
   'длинный список обрезается, но общее число остаётся честным',
 )
-assert.equal(pagesLine([], 'https://dzen.ru/'), '', 'без страниц строки нет')
+assert.equal(pagesLine([], 'https://example.com/'), '', 'без страниц строки нет')
 
 // Длинные адреса в этом списке не обрезаются: обрубок ничего не сообщает.
 assert.equal(
-  pagesLine(['https://dzen.ru/sitemaps/channels_v2/sitemap.xml'], 'https://dzen.ru/'),
-  'проверено на 1 странице: /sitemaps/channels_v2/sitemap.xml',
+  pagesLine(['https://example.com/sitemaps/catalog_v2/sitemap.xml'], 'https://example.com/'),
+  'проверено на 1 странице: /sitemaps/catalog_v2/sitemap.xml',
 )
 console.log('  ✓ в конце перечислены проверенные страницы')
 
@@ -274,3 +275,21 @@ assert.equal(checkGlobalLimit(), null, 'без общего лимита нич�
 console.log('  ✓ по умолчанию бот открыт и общего потолка нет')
 
 console.log('\n  Логика бота работает.\n')
+
+// ── удаление своих данных ────────────────────────────────────────────────────
+
+// Право попросить удалить свои данные есть у каждого, и просьба исполняется
+// командой, а не перепиской с владельцем бота.
+
+resetAccess()
+resetLimits()
+
+const nothing = forget('никогда-не-заходил')
+assert.match(nothing, /нечего/, 'если данных нет, так и говорим')
+assert.doesNotMatch(nothing, /удал[её]н/, 'не сообщаем об удалении того, чего не было')
+
+spend('гость-удаляющий')
+assert.ok(checkLimits('гость-удаляющий'), 'после проверки включается пауза')
+forget('гость-удаляющий')
+assert.equal(checkLimits('гость-удаляющий'), null, 'вместе с данными стираются и счётчики')
+console.log('  ✓ человек может стереть свои данные командой')

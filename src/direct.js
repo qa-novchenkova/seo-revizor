@@ -29,8 +29,15 @@ import { checkContent } from './checks/content.js'
 import { checkSpeed } from './checks/speed.js'
 import { SEVERITIES } from './rules/index.js'
 
-/** Сколько страниц из выборки проверяем поштучно. */
-const PAGES_TO_CHECK = 3
+/**
+ * Сколько страниц проверяем поштучно: главная плюс образцы из выборки.
+ *
+ * Пять, а не три, потому что без модели порядок задан заранее и добрать
+ * страницу по ходу некому. Каждая страница добавляет два вызова и пару секунд,
+ * денег не стоит вовсе. Больше упрётся в размер выборки: по ссылкам их пять,
+ * по карте сайта восемь.
+ */
+const PAGES_TO_CHECK = 5
 
 export async function runDirect(site, options = {}) {
   const { onStep = () => {} } = options

@@ -49,7 +49,8 @@ const SITE = 'https://qa-novchenkova.github.io/seo-revizor/'
  * только шаги выбирает не модель. Появится ключ — включится агент,
  * менять в боте ничего не придётся.
  */
-const HAS_MODEL = Boolean(process.env.ANTHROPIC_API_KEY)
+// Модель доступна двумя путями: напрямую у Anthropic или через шлюз Timeweb.
+const HAS_MODEL = Boolean(process.env.ANTHROPIC_API_KEY || process.env.AI_GATEWAY_KEY)
 
 /**
  * Ограничения. Каждая проверка стоит денег и занимает несколько минут,
@@ -740,7 +741,8 @@ async function runAudit(job, notice) {
     await send(
       chatId,
       `Расход: ${result.usage.inputTokens} + ${result.usage.outputTokens} токенов, ` +
-        `примерно $${result.usage.cost.toFixed(2)}. Вызовов инструментов: ${result.calls.length}.`,
+        `примерно ${money(result.usage.cost, result.usage.currency)}. ` +
+        `Вызовов инструментов: ${result.calls.length}.`,
     )
   }
 
@@ -952,6 +954,14 @@ async function sendDocument(chatId, content, fileName, caption, mime = 'text/mar
 
 function reportFailure(error) {
   console.error('Сбой при разборе сообщения:', error)
+}
+
+/**
+ * Деньги пишутся по обычаю своей валюты: доллар перед числом, рубль после.
+ * Мелочь, но «$12.30 ₽» в отчёте выглядит ошибкой.
+ */
+export function money(cost, currency = '$') {
+  return currency === '$' ? `$${cost.toFixed(2)}` : `${cost.toFixed(2)} ${currency}`
 }
 
 function sleep(ms) {

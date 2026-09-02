@@ -25,11 +25,29 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 
 import { SEVERITY_LABELS, SEVERITIES } from './rules/index.js'
+import { gatewayCaller } from './gateway.js'
 
-const MODEL = process.env.REVIZOR_MODEL || 'claude-opus-5'
+/**
+ * Имя модели читается по месту, а не при загрузке файла.
+ *
+ * Модуль загружается раньше, чем подключается .env, поэтому запись на верхнем
+ * уровне брала бы значение до его появления и переменная из файла молча
+ * не работала бы.
+ */
+function currentModel() {
+  return process.env.REVIZOR_MODEL || 'claude-opus-5'
+}
 
-/** Цена за миллион токенов, чтобы показывать стоимость прогона. */
-const PRICE = { 'claude-opus-5': { input: 5, output: 25 }, 'claude-haiku-4-5': { input: 1, output: 5 } }
+/**
+ * Цена за миллион токенов. У прямого доступа к Anthropic счёт в долларах,
+ * у шлюза Timeweb — в рублях, поэтому валюта хранится рядом с ценой:
+ * иначе в отчёте сложатся разные деньги под одним знаком.
+ */
+const PRICE = {
+  'claude-opus-5': { input: 5, output: 25, currency: '$' },
+  'claude-haiku-4-5': { input: 1, output: 5, currency: '$' },
+  'anthropic/claude-haiku-4-5': { input: 135, output: 1080, currency: '₽' },
+}
 
 /** Потолок на число кругов: страховка от бесконечного цикла. */
 const MAX_STEPS = 14
@@ -103,12 +121,18 @@ function short(value, max = 90) {
  * так цикл можно проверить, подставив вместо модели заглушку.
  * Иначе каждый запуск теста стоил бы денег и требовал ключа.
  */
+export function defaultCaller() {
+  // Ключ шлюза важнее: если он задан, значит доступ к Anthropic напрямую
+  // либо не настроен, либо не нужен.
+  return process.env.AI_GATEWAY_KEY ? gatewayCaller() : anthropicCaller()
+}
+
 export function anthropicCaller() {
   const anthropic = new Anthropic()
 
   return (request) =>
     anthropic.beta.messages.create({
-      model: MODEL,
+      model: currentModel(),
       max_tokens: 16000,
       thinking: { type: 'adaptive' },
       // Если запрос упрётся в предохранитель модели, ответ подхватит запасная,
@@ -120,7 +144,8 @@ export function anthropicCaller() {
 }
 
 export async function audit(site, options = {}) {
-  const { onStep = () => {}, maxSteps = MAX_STEPS, createMessage = anthropicCaller() } = options
+  const { onStep = () => {}, maxSteps = MAX_STEPS, createMessage = defaultCaller() } = options
+  const model = currentModel()
 
   const root = path.dirname(fileURLToPath(import.meta.url))
 
@@ -217,7 +242,7 @@ export async function audit(site, options = {}) {
 
   await mcp.close()
 
-  const price = PRICE[MODEL]
+  const price = PRICE[model]
   const cost = price ? (inputTokens / 1e6) * price.input + (outputTokens / 1e6) * price.output : null
 
   const collected = [...findings.values()].sort(
@@ -226,14 +251,14 @@ export async function audit(site, options = {}) {
 
   return {
     site,
-    model: MODEL,
+    model,
     finishedAt: new Date().toISOString(),
     report,
     findings: collected,
     pages: [...pages],
     calls,
     stoppedBy,
-    usage: { inputTokens, outputTokens, cost },
+    usage: { inputTokens, outputTokens, cost, currency: price?.currency || '$' },
   }
 }
 

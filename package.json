@@ -4,7 +4,7 @@
   "description": "MCP-сервер и агент, который проверяет сайт по SEO-чек-листу и собирает отчёт",
   "main": "src/server.js",
   "scripts": {
-    "test": "node test/loop.js && node test/report.js && node test/speed.js && node test/bot.js && node test/access.js",
+    "test": "node test/loop.js && node test/report.js && node test/speed.js && node test/bot.js && node test/access.js && node test/gateway.js",
     "check": "node test/check.js",
     "mcp": "node test/mcp.js",
     "audit": "node test/audit.js",
@@ -15,7 +15,8 @@
     "site": "node tools/build-site.js",
     "text": "node tools/check-text.js",
     "bot": "node src/bot.js",
-    "direct": "node test/direct.js"
+    "direct": "node test/direct.js",
+    "gateway": "node test/gateway.js"
   },
   "keywords": [
     "mcp",
